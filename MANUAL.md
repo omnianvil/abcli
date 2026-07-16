@@ -146,9 +146,15 @@ receive our source.
 ```bash
 abcli publish                       # both halves: API + MFE
 abcli publish --back                # the API only:  git push --force-with-lease HEAD:<branch>
-abcli publish --front               # the MFE only:  build locally, push the packaged dist
+abcli publish --front               # the MFE only:  build from HEAD, push the packaged dist
 abcli publish --dry-run             # resolve + report what would go where; write nothing
+abcli publish --status [<sha>]      # the receipt: did it land? (default: your last publish)
 ```
+
+**Publish publishes your last COMMIT, not your working tree.** Both halves share that semantic: `--back`
+pushes HEAD, and `--front` builds inside a clean export of HEAD — so the sha it stamps is provably what
+shipped. Uncommitted changes never ship; when you have any, publish says so by name
+(`⚠ N uncommitted change(s) did NOT ship (...) — commit to include them`).
 
 One command puts your work on the shared dev environment — **front and back** — behind a single door. The
 destination is resolved from your repo's own config; you never name a bucket, a storage credential, or a
@@ -172,6 +178,28 @@ behind the environment, and a CI test on our side keeps it that way.
 
 `--env` accepts only `dev-gate` for now — it refuses anything else by name. Higher environments promote
 through CI, not through this verb.
+
+### The receipt — `--status`
+
+A publish is **asynchronous**: the push returns immediately, and the environment converges after it. The
+publish id printed at the end **is the commit sha** you published — query its receipt any time:
+
+```bash
+abcli publish --status              # your last publish (remembered per-repo, in .git/)
+abcli publish --status <sha>        # any publish id
+```
+
+The environment posts its verdict as **commit statuses** on that sha — also visible on the commit in the
+GitHub UI:
+
+| context | green means |
+|---|---|
+| `devgate/back` | pulled, installed, reloaded — **and the app answers its health probe** |
+| `devgate/front` | the packaged dist was unpacked and served |
+
+Exit codes are script-friendly: `0` every posted verdict succeeded · `1` any failure · `2` still pending
+(no verdict yet is *pending*, never success). Reading the receipt uses the same GitHub identity that
+pushed — no extra token, no extra surface.
 
 ---
 
