@@ -27,6 +27,7 @@ abcli check              # the architecture gate — run it before you push; CI 
 abcli ci                 # run THIS repo's CI jobs here, with the dev box's leak STRIPPED
 abcli explain <rule>     # what a rule wants, why it exists, and how to argue with it
 abcli install-hooks      # a pre-commit hook that runs the gate on staged files
+abcli publish            # put your app on the shared dev environment — API + MFE, one door (MANUAL)
 abcli feedback new       # report a defect or ask for a capability (see below)
 abcli doctor             # preflight your dev environment (docker, toolchain, ports)
 abcli --help             # everything else — and see the MANUAL

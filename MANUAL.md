@@ -124,6 +124,7 @@ abcli new app-registration          # registration seed files for an app
 abcli design-app                    # free text → an app + backend spec
 abcli scaffold-app                  # scaffold from an AppSpec JSON
 abcli gen-api                       # typed openapi-fetch client wiring for an MFE
+abcli docs scaffold                 # docs/<persona>/<type>/ — tutorials, how-tos, reference, explanation
 ```
 
 ---
@@ -137,6 +138,40 @@ abcli doctor                        # preflight: docker, toolchain, image, ports
 
 `abcli dev` runs against the **compiled** platform and the public SDK — you build and run your app; you never
 receive our source.
+
+---
+
+## `abcli publish` — put your app on the shared dev environment
+
+```bash
+abcli publish                       # both halves: API + MFE
+abcli publish --back                # the API only:  git push --force-with-lease HEAD:<branch>
+abcli publish --front               # the MFE only:  build locally, push the packaged dist
+abcli publish --dry-run             # resolve + report what would go where; write nothing
+```
+
+One command puts your work on the shared dev environment — **front and back** — behind a single door. The
+destination is resolved from your repo's own config; you never name a bucket, a storage credential, or a
+git remote on the command line:
+
+| source | value |
+|---|---|
+| `omni.config.json` | the app **id** → names `/apps/<id>` and `/api/<id>` |
+| `DEVGATE_REMOTE` (`.env`) | git remote for the dev-gate refs — required |
+| `DEVGATE_BRANCH` (`.env`) | default `dev-gate` |
+| `DEVGATE_DIST_REF` (`.env`) | optional; default `<branch>-dist` |
+
+**`--back`** force-pushes (with lease) your HEAD to the dev-gate branch; the host converges it — pull,
+`uv sync --frozen`, reload. **`--front`** builds the MFE with your own toolchain (`scripts/vendor-types.sh`
+then `pnpm build`) and pushes the packaged `frontend/dist` to a one-commit-deep dist ref; the host unpacks
+and serves it. Force-updates are expected on both — these refs are live pointers, not history.
+
+**The only credential is your GitHub identity.** Both halves are a `git push`, so being able to publish
+*is* being a member of the org — nothing else to issue, carry, or leak. abcli never touches the storage
+behind the environment, and a CI test on our side keeps it that way.
+
+`--env` accepts only `dev-gate` for now — it refuses anything else by name. Higher environments promote
+through CI, not through this verb.
 
 ---
 
