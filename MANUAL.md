@@ -29,10 +29,11 @@ That is the *global* install — enough to bootstrap. **What actually governs a 
 ## `abcli pin` — one abcli per repo, not one per developer
 
 ```bash
-abcli pin                      # what does THIS repo pin?
+abcli pin                      # what does THIS repo pin?  (and is it behind?)
 abcli pin --latest             # pin the newest release   (writes .abcli.lock)
 abcli pin --version 0.5.7      # pin an exact version
 abcli pin install              # materialize the pinned binary for this arch
+abcli pin lag [--json]         # is this repo behind the latest release?
 ```
 
 `.abcli.lock` is committed. It carries the version **and the sha256**, so:
@@ -44,6 +45,24 @@ abcli pin install              # materialize the pinned binary for this arch
 `abcli pin install` fetches the pinned binary into a git-ignored cache and **verifies it against the lock's
 sha256**. The lock is the pin; the cache is disposable. CI bootstraps from the lock, so **CI needs no token
 and cannot be tricked into running a different gate than yours.**
+
+### A pin that goes stale is a gate that goes blind
+
+The pin's strength is also its trap: **a pinned gate is a frozen gate.** Your repo does not see a new rule
+until you bump, and nothing used to tell you the pin had aged — one app shipped for weeks blind to a verb
+three releases newer, and only found out by running `abcli pin --latest` on a hunch.
+
+So `abcli pin` (and the `pin install` your CI already runs) compares your lock against the latest release
+and says so:
+
+```
+⚠️  pin is BEHIND — this repo pins abcli v0.5.13, latest is v0.5.29. The gate enforces the v0.5.13 rules;
+    newer verbs/checks are invisible here until you bump.
+```
+
+It **never fails** — a stale pin exits 0, always. Reproducibility is the whole point of pinning, and a tool
+that broke your build over a rule you never opted into would be a tool you were right to distrust. It only
+tells you. And if it cannot reach the release feed it says *that*, rather than reassuring you.
 
 ---
 
@@ -200,6 +219,172 @@ GitHub UI:
 Exit codes are script-friendly: `0` every posted verdict succeeded · `1` any failure · `2` still pending
 (no verdict yet is *pending*, never success). Reading the receipt uses the same GitHub identity that
 pushed — no extra token, no extra surface.
+
+### Two ways `--front` alone used to hand you a receipt that could never arrive
+
+Both are now refusals, **before** the build, because the alternative was a green followed by a `pending` you
+could poll forever. They exist only for `--front` **by itself** — a full `abcli publish` is immune to both,
+because its `--back` half does the very thing that was missing.
+
+**1. The app was never in discovery.** The environment finds apps by the **dev-gate branch**; the dist ref
+is only its satellite. A first-ever front-only publish creates the satellite and nothing to anchor it, so
+there is nothing to converge — ever:
+
+```
+publish: --front would push to dev-gate-dist, but 'dev-gate' does not exist on <remote> …
+  Run `abcli publish` (both halves) or `abcli publish --back` first to make the app discoverable.
+```
+
+**2. The commit never left your machine.** `--back` pushes your HEAD, so the sha lands on the remote as a
+side effect and the receipt always resolves. `--front` pushes only the **orphan** dist ref — your sha never
+travels. Publishing front-only from an unpushed commit therefore put the dist in the bucket and left the
+proof orphaned: `--status` 404s **forever**, until somebody runs `git push`.
+
+```
+publish: HEAD (36745cf) is not on <remote> — a front-only publish pushes only the orphan dev-gate-dist,
+so this sha would never reach the remote and the receipt could NEVER resolve.
+  Fix: `git push` the commit, then re-run `abcli publish --front`.
+  Override with --allow-unpushed if you know the sha reaches the remote another way.
+```
+
+`--allow-unpushed` exists for the dev whose sha arrives by another route — but it is a claim you make out
+loud, not a default. And if abcli cannot ask the remote at all (no network, no `gh`), it does **not** block
+you: its own diagnostic's trouble is not your problem.
+
+---
+
+## `abcli px` — the committee radio
+
+```bash
+abcli px inbox                     # what is waiting on ME
+abcli px send --to vero "…"        # open a thread            (born `over`)
+abcli px get <msg-id>              # read ONE message         (marks it read)
+abcli px reply <msg-id> "…"        # answer in the thread     (born `over`)
+abcli px out <msg-id> "…"          # câmbio, desligo — closes the thread
+abcli px listen --last 20          # the open frequency
+abcli px who [--expertise rls]     # profiles — who to address
+```
+
+A direct channel between first-level agents, who otherwise have none. **`abcli px --help` is the
+etiquette** — read it before your first message; it is the protocol, not a preference. In short:
+
+- **Two statuses, and only two.** `over` (*câmbio* — I am waiting for your answer) and `out` (*câmbio,
+  desligo* — closed, nobody owes anybody anything). "Over and out" is a contradiction that exists in films.
+  A thread is open while its last message is `over`, and that state is derived, never stored.
+- **Reading without replying is allowed**, explicitly. If a message needs nothing from you, `px out` it.
+  What gets chased is not-reading, and reading-then-shelving.
+- **The frequency is open.** `--to` says who a message is *addressed* to, never who may read it. But
+  nobody is obliged to listen — listening is always pull.
+- **PX or an issue?** If nobody has to answer, it is not a PX. If the outcome must be findable in six
+  months by somebody who was not here, PX is not enough — land it in an issue too.
+
+### The footer
+
+Every abcli command ends with a nudge when something is waiting:
+
+```
+📬 2 mensagens aguardando — `abcli px inbox`
+```
+
+It rides commands you already run — including your pre-commit hook — so the channel needs no daemon to
+reach you. Three things it will never do: **change your exit code** (the radio being down leaves your
+`abcli check` exactly as it was, and silent), **make you wait** (~1.5s ceiling; a refused connection is
+instant), or **appear in machine output** (no TTY, or `--json`/`--quiet`/`--format json`, and it does not
+exist). Set `ABCLI_PX_FOOTER=0` for silence.
+
+Configure it with three environment variables — and note that abcli **never guesses who you are**, because
+reporting somebody else's inbox is worse than reporting none:
+
+| var | meaning |
+|---|---|
+| `PX_BASE` | the API root, e.g. `http://localhost:8090/api/px/internal` |
+| `PX_KEY` | the service key (or `INTERNAL_SERVICE_KEY`) |
+| `PX_AGENT` | **who you are** — your committee name |
+
+---
+
+## `abcli bundle-check` — the build is green and it ships a `throw`
+
+```bash
+abcli bundle-check frontend/dist          # 0 clean · 1 contaminated · 2 could not verify
+abcli bundle-check ./unpacked --json      # for CI and the host
+```
+
+**A missing federation share does not fail your build. It ships.** If `vite.config.ts` stops spreading the
+external shared set, the bundler quietly keeps the local fallback and packages the `@omnianvil` **types-only
+stub** — a module whose only statement is a `throw`. The build exits 0, the chunks are emitted, everything
+is green, and the app dies on the **first render, in a user's browser**, with nothing in the toolchain
+saying a word.
+
+`bundle-check` reads the **emitted bundle** and refuses one carrying that stub. Reading the bundle, and not
+`vite.config.ts`, is the whole point: a config can name the right symbol and still produce the wrong output
+(imported from a module that no longer exports it, an empty array, a later `mergeConfig`). **The artifact is
+the only witness that cannot be talked out of it.**
+
+It needs no repo around it — point it at an unpacked `dist.tar.gz` with no git, no `omni.config.json`, no
+`node_modules` — and it **fails closed**: a missing, empty or unreadable dist is `cannot verify` (exit 2),
+never a pass. `abcli publish --front` runs the same scan on the dist it just built, so a bundle that would
+die on first render never reaches the shared environment.
+
+---
+
+## `abcli plan` — the nine delivery files, owned by the tool
+
+```bash
+abcli plan                     # what plan does this repo carry, and is it intact?
+abcli plan check               # THE GATE — red on drift  (run it in your CI)
+abcli plan upgrade             # adopt the plan this abcli ships (this is also the migration)
+```
+
+Nine files take an app from a clone to a running image — `scripts/fetch-sdk.sh`, `scripts/vendor-types.sh`,
+both workflows, the `Dockerfile`, `entrypoint.sh`, `.npmrc`, `.dockerignore`, `.gitignore`. Their owner used
+to be copy-and-paste, which means **one bug was N bugs and one fix was N fixes** — each found alone, later,
+in somebody else's red PR. A repair could not travel.
+
+Now the plan is a versioned artefact: your repo pins one in `.abcli-plan.lock`, a fix lands upstream, and it
+reaches every repo that upgrades. **Do not hand-edit a planned file** — `plan check` refuses, on purpose.
+
+The lock cannot be its own witness: re-blessing a hand-edit inside the lock is reported as a **forged** lock,
+not as integrity, and a plan version this binary never published is reported as **unverifiable** rather than
+intact. A gate with no anchor must refuse, not pass.
+
+---
+
+## `abcli template` — the mechanical half of a shared file, owned by the tool
+
+```bash
+abcli template                 # show drift against the gold
+abcli template check           # THE GATE — fails closed
+abcli template sync            # write the owned parts; never touches yours
+```
+
+`plan` owns whole files. This owns what `plan` cannot: files that weld a **mechanical part** (the tool's) to
+a **per-app part** (yours) — and it owns them **per key**, never per file.
+
+Today that is `.devcontainer/devcontainer.json` and `AGENTS.md`:
+
+| file | abcli owns | you own (asserted present, never touched) |
+|---|---|---|
+| `.devcontainer/devcontainer.json` | `image` (the digest), `remoteUser`, `workspaceFolder`, `features`, `mounts` | `name`, `forwardPorts`, `portsAttributes`, `postAttachCommand` |
+| `AGENTS.md` | the `<!-- abcli:section:workflow -->` block | every other section, and all your prose |
+
+**Why per key and not per file.** The first attempt at this owned the devcontainer whole, and it would have
+**erased every app's ports** — the header is identical across apps, the footer is not. Ownership stops
+exactly where your content starts, and a test freezes that boundary as something that cannot happen.
+
+`sync` splices the gold's **raw text** over yours, so every comment in your file — including the ones you
+wrote — survives byte for byte. `check` fails **closed**: if it cannot resolve the gold, that is not a pass.
+
+**The escape hatch, and its price.** A repo that must diverge declares it:
+
+```jsonc
+// .abcli-template.waivers      (its own file — a sync would erase it, and the pin rewrites .abcli.lock)
+{ ".devcontainer/devcontainer.json::image": { "reason": "patched devbox for the on-prem POC", "owner": "vero" } }
+```
+
+A waiver **without a reason and an owner is not a waiver** and is ignored — that is the `# noqa` we refuse.
+Active waivers print on **every** check run, not behind a flag: a waiver nobody sees is the drift it was
+meant to declare.
 
 ---
 
