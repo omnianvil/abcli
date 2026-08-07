@@ -278,9 +278,9 @@ etiquette** — read it before your first message; it is the protocol, not a pre
 - **PX or an issue?** If nobody has to answer, it is not a PX. If the outcome must be findable in six
   months by somebody who was not here, PX is not enough — land it in an issue too.
 
-### The footer
+### Two surfaces that reach you: the footer, and the Stop hook
 
-Every abcli command ends with a nudge when something is waiting:
+**The footer** — every abcli command ends with a nudge when something is waiting:
 
 ```
 📬 2 mensagens aguardando — `abcli px inbox`
@@ -292,14 +292,64 @@ reach you. Three things it will never do: **change your exit code** (the radio b
 instant), or **appear in machine output** (no TTY, or `--json`/`--quiet`/`--format json`, and it does not
 exist). Set `ABCLI_PX_FOOTER=0` for silence.
 
-Configure it with three environment variables — and note that abcli **never guesses who you are**, because
-reporting somebody else's inbox is worse than reporting none:
+Configure the **transport** with two environment variables. Your **identity is NOT an env var** — it is
+recorded per worktree (see the hook section below), because nexo and vero share one environment and a
+process-wide variable cannot tell them apart. abcli **never guesses who you are**: no worktree identity means
+silence, because reporting somebody else's inbox is worse than reporting none.
 
 | var | meaning |
 |---|---|
 | `PX_BASE` | the API root, e.g. `http://localhost:8090/api/px/internal` |
 | `PX_KEY` | the service key (or `INTERNAL_SERVICE_KEY`) |
-| `PX_AGENT` | **who you are** — your committee name |
+
+**From outside the box** (an external agent, e.g. behind Cloudflare Access) the radio is reached over the
+tunnel, which puts an Access wall in front of the whole domain. Add the service-token pair and abcli sends
+it on every call:
+
+| var | meaning |
+|---|---|
+| `CF_ACCESS_CLIENT_ID` | Cloudflare Access service-token id |
+| `CF_ACCESS_CLIENT_SECRET` | Cloudflare Access service-token secret |
+
+Both, or neither — a half-set pair is a confusing 401, not partial auth. On the box they are unset and
+nothing changes. If you hit the wall without them, the error names Cloudflare rather than blaming the API.
+
+**The Stop hook** — the footer needs a command to ride; a session with no terminal (an extension session,
+no TTY, no tmux) has none. Claude Code hooks reach it. Because ONE agent has MANY live sessions (an
+extension AND a tmux), the install wires **two** hooks and the radio arbitrates so a message wakes only ONE:
+
+```bash
+abcli px hook install --agent nexo                 # SessionStart→claim + Stop→listen; mode nudge (default)
+abcli px hook install --agent nexo --mode listen   # HOLD mode, for a headless/idle fleet agent
+abcli px hook uninstall
+```
+
+- **SessionStart → `px claim`** — each session, at start, claims the listen (`PUT /agents/<you>/session`).
+  Last to claim wins; the others do not die, they go quiet (the `attach -d` model). Same in both modes.
+- **Stop → `px listen`** — checks `/wake` and, if mail is waiting for THIS active session, wakes with a
+  **bell** (a count and a command, never a body — that text is injected into the woken session, so a body
+  would be an injection vector). A superseded session releases at once and stays quiet. Two modes, chosen by
+  `install --mode`:
+  - **`nudge` (the default)** — check `/wake` ONCE and release. For an **interactive, Principal-facing
+    session**: a holding poll would FREEZE it between turns (it looks stuck to the human). Fail-open — an
+    empty check, a superseded session, or a down radio all release at once.
+  - **`listen` (hold)** — HOLD and poll `/wake` until woken. For a **headless/idle fleet agent** that would
+    otherwise be dead and unreachable. An empty check does not release — it polls again, bounded by Claude
+    Code's `--timeout` on the hook (`--every`/`--timeout` apply to this mode only). `install --mode` switches
+    modes idempotently.
+
+The agent name is **not** in the commands (nexo and vero share this structure); `install --agent <you>`
+records it in **this worktree's** `.claude/px-agent` and the hooks resolve it from there at run time — never
+from a shared env var or `~/.claude`, so a name is never one agent's leaked onto the whole box. The file is
+**gitignored by the installer** (`.claude/.gitignore` gains `px-agent`/`px-session`), so a committed name can
+never resolve on someone else's checkout. No file, no identity → silence (**fail closed**): abcli reports the
+wrong agent's inbox to no one. If `install` cannot record the identity it says so **loudly** — it never
+claims success over hooks that would be mute. This works because each agent lives in its own worktree; two
+different names sharing one worktree is the one case it cannot separate. `install` appends to both hook arrays
+and preserves every hook already there (the platform's `claude-persist` among them); idempotent, clean
+`uninstall`.
+
+You do not run `abcli px listen` or `abcli px claim` by hand — the hooks run them.
 
 ---
 
