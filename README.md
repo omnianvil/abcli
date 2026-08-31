@@ -1,66 +1,91 @@
 # abcli
 
-**The developer CLI for teams building on OmniAnvil.** One tool, installed as one package. It runs the
-architecture quality-gate on your repo before CI does, tells you *why* a rule exists when it stops you, and
-carries a feedback channel back to us — a defect or a capability request, filed from your terminal.
+> **Status:** Phase 0 (early development) — internal-only.
+> **Future home:** standalone repository (see [`../../internal-docs/ITER-CLI-AGENTS-PLAN.md`](../../internal-docs/ITER-CLI-AGENTS-PLAN.md)).
+
+`abcli` is the architectural enforcement and code-generation toolchain
+for the ITER SUITE. It validates that committed code conforms to the
+project's architectural decisions (ADRs) and — in later phases — generates
+new applications, services and tests that already conform out of the box.
+
+> ### [`MANUAL.md`](MANUAL.md) is the PUBLIC manual — editing it publishes
+>
+> It is the reference external developers read, mirrored to `omnianvil/abcli`
+> **with each release**, so it describes the binary a consumer can actually
+> install. It lived only on the public mirror once, hand-maintained, and fell
+> **four releases behind** — three shipped verbs with no mention at all. It is
+> sourced here so a change to a verb and a change to its documentation land in
+> the same PR, and `test_manual_documents_the_binary.py` refuses a verb the
+> binary exposes and the manual never names.
+
+## Why this directory exists separately
+
+This folder is treated as if it were already a standalone repository. From
+day 1, no code outside `tools/abcli/` imports from it, and nothing
+inside `tools/abcli/` imports from `apps/`, `backend/`, or `packages/`.
+
+When the spinoff happens, the migration is a single command:
 
 ```bash
-ARCH=$(uname -m | sed 's/aarch64/arm64/;s/x86_64/amd64/')
-gh release download --repo omnianvil/abcli --pattern "abcli-linux-$ARCH*" --clobber
-sha256sum -c "abcli-linux-$ARCH.sha256"
-chmod +x "abcli-linux-$ARCH" && sudo mv "abcli-linux-$ARCH" /usr/local/bin/abcli
-
-abcli --version
+git filter-repo --subdirectory-filter tools/abcli
 ```
 
-**abcli ships as a closed, per-architecture binary — there is no wheel and no source tree.** A copy of a
-tool is a fork of it. Once installed, the thing that actually governs a repo is its **pin** (`abcli pin
---latest`), so your global install can never silently change what a repo's gate enforces.
+See **§3 — Target Architecture** of the implementation plan for the full
+boundary contract.
 
-📖 **[Read the manual](MANUAL.md)** — every verb, what it protects, and the traps.
+## Directory layout
 
-## What you'll actually run
+```
+tools/abcli/
+├── rules/         # YAML rule definitions (one per ADR)
+├── fixtures/      # Pass/fail fixtures for each rule (regression suite)
+├── runner/
+│   ├── bash/      # Phase 0 — Bash + ripgrep + yq implementation
+│   └── go/        # Phase 0.5 — single static binary (deferred)
+├── tests/         # run-fixtures.sh and friends
+├── agents/        # Phase 1+ — Python + LangGraph agentic factory
+└── docs/          # CLI's own documentation
+```
+
+## Phase status
+
+| Phase | Status | Description |
+|---|---|---|
+| 0   | Shipped | Bash runner + YAML rules-as-data |
+| 0.5 | Deferred | Go runner (drop-in replacement) |
+| 1   | Shipped | `/agents/` skeleton + RAG over ADRs |
+| 2   | Shipped | App scaffolder agent (`scaffold-app` / `new app` — GOFAI renderer, page templates, gen-api, docs, engine files) |
+| 3   | Partial | Full pipeline (Architect → Scaffolder → Dev → QA) — `new entity` + the ADR/federation gates land; the QA leg is open |
+| 4   | Not started | Cortex integration |
+| 5   | Shipped | Spinoff to standalone repo (`omnianvil/abcli`) |
+
+## Running locally
+
+**Install it. Do not copy it.** (ABCLI-ADR-010 — the wheel is the whole tool.)
 
 ```bash
-abcli pin --latest       # pin THIS repo's abcli (.abcli.lock) — the gate stops depending on your laptop
-abcli check              # the architecture gate — run it before you push; CI runs the same one
-abcli ci                 # run THIS repo's CI jobs here, with the dev box's leak STRIPPED
-abcli explain <rule>     # what a rule wants, why it exists, and how to argue with it
-abcli install-hooks      # a pre-commit hook that runs the gate on staged files
-abcli publish            # put your app on the shared dev environment — API + MFE, one door (MANUAL)
-abcli feedback new       # report a defect or ask for a capability (see below)
-abcli doctor             # preflight your dev environment (docker, toolchain, ports)
-abcli --help             # everything else — and see the MANUAL
+pip install omnianvil-agents        # gives you BOTH `omnianvil-agents` and `omni`
+
+omnianvil-agents check              # the ADR gate, over the whole repo
+omnianvil-agents check --staged     # only what git has staged — what the pre-commit hook runs
+omnianvil-agents install-hooks      # writes a hook that calls the INSTALLED cli
+omni doctor                         # preflight the external-dev environment
 ```
 
-**`abcli ci` is the bench.** A rich dev box lies: your ambient venv and `$PYTHONPATH` leak onto `sys.path`,
-so `pytest` passes here and the clean runner fails on a dependency it never had. `abcli ci` runs your real
-workflow's steps with that leak stripped — **a green here is a green there.** Iterate at three seconds a
-loop instead of six minutes of billed CI.
+A copy of a tool is a fork of it: the platform's vendored `tools/abcli/` sat at `VERSION 0.0.0` while abcli
+shipped `0.4.0` — still named `iter.sh`, still carrying bugs fixed months earlier. And an external app has no
+monorepo and no source tree, so nothing may reach for one.
 
-`abcli check` is the gate. It fails the same way in your editor, your pre-commit hook, and CI — because it is
-the same gate in all three. When it stops you and the reason isn't obvious, `abcli explain <rule>` says what
-the rule is protecting and how to opt out on purpose.
+<details><summary>Legacy: the vendored bash runner (it dies with the last <code>tools/abcli/</code>)</summary>
 
-## Found a bug, or want it to do something it can't?
-
-This repository **is** the channel. There are two doors, and both run the same completeness check before an
-issue is ever created:
-
-- **From your terminal** — `abcli feedback new`. It asks for evidence (a path, a traceback, the command that
-  failed), searches for duplicates, and files it. Agents use `--json`.
-- **From the browser** — [open an issue](../../issues/new/choose) and pick a form.
-
-You don't classify the report — you don't need to know which piece of the system it belongs to. Paste the
-evidence; the routing is derived from it.
-
-## What this repo is, and isn't
-
-The tool ships as a **compiled artifact** — you install it, you don't build it, and you never need its source
-to use it. Releases and issues live here; that's the whole surface. If a gate misfires on your code, that's
-not something to work around quietly — it's a `question` issue, and it's the fastest way to get the rule
-fixed.
+```bash
+# These reach into agents/src/… — they only work where the SOURCE has been copied.
+tools/abcli/runner/bash/run.sh --all
+tools/abcli/runner/bash/run.sh --staged
+tools/abcli/tests/run-fixtures.sh
+```
+</details>
 
 ## License
 
-See [LICENSE](LICENSE).
+See [`LICENSE`](LICENSE).
