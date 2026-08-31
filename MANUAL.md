@@ -101,7 +101,10 @@ abcli ci --workflow .github/workflows/other.yml
 **This is the bench.** It executes each job's `run:` steps from your actual workflow file — not an
 approximation of them, not a second implementation that can drift. It skips the `uses:` setup steps (the repo
 and the toolchain are already here) and covers the plain `test` job that `check` and `federation-check` do
-not.
+not. It also feeds each step the environment the runner would: the workflow-level and job-level `env:` blocks
+(a step-level `env:` wins), and the runner state files — `$GITHUB_OUTPUT`, `$GITHUB_ENV`,
+`$GITHUB_STEP_SUMMARY`, `$GITHUB_PATH` — so a value a step writes to `$GITHUB_ENV`/`$GITHUB_PATH` reaches the
+next step, exactly as on GitHub. A workflow abcli itself renders runs green on the bench.
 
 And it does the one thing that makes a local green *worth something*:
 
@@ -152,11 +155,79 @@ abcli docs scaffold                 # docs/<persona>/<type>/ — tutorials, how-
 
 ```bash
 abcli dev                           # this app's backend inside the closed devbox image
-abcli doctor                        # preflight: docker, toolchain, image, ports, app config
+abcli dev --stack                   # …and its whole depends_on closure, behind the portal
+abcli dev --app-only                # …and I know it has dependencies that will not be up
+abcli doctor                        # preflight: docker, toolchain, image, ports, app config, and your STACK
 ```
 
 `abcli dev` runs against the **compiled** platform and the public SDK — you build and run your app; you never
 receive our source.
+
+### If your app declares `depends_on`, read this
+
+`abcli dev` boots **one** container. An app that declares
+
+```json
+{ "id": "people-hub", "depends_on": ["oracle-hcm-connector"] }
+```
+
+is not "the app minus a feature" when its dependency is absent — it is an app whose upstream calls fail
+**invisibly**: the directory comes back **empty** and the guarded routes **401**, which reads exactly like
+success. That is the worst failure a devbox can have, so `dev` now says it out loud before booting, and
+`abcli doctor` prints your whole stack — every app in the `depends_on` closure, in boot order, with the port
+and edge route each will answer on, and a ✗ against any dependency no checkout provides.
+
+Dependencies are located by their **declared `id`** (never the folder name) in sibling checkouts — your
+multiroot workspace. Add more places to look with `--app-root <dir>` or `$ABCLI_APP_ROOTS`.
+
+Once you have accepted the gap, `abcli dev --app-only` silences the banner. **Treat an empty index in that
+mode as unproven, not as data.**
+
+### `abcli dev --stack` — your app AND its dependencies, behind the portal
+
+```bash
+abcli dev --stack        # generate the whole closure as a compose overlay + edge routes
+```
+
+It writes three files under `.abcli-devstack/`:
+
+| file | what it is |
+|---|---|
+| `apps.compose.yml` | one unit per app in the closure — a backend (your repo's uvicorn inside the devbox image) and a static MFE host |
+| `apps.nginx.conf` | the edge routes: `/api/<id>` and `^~ /apps/<id>/` per app |
+| `apps.db-init.sql` | `CREATE DATABASE` per app — each app owns its migrations, none owns its own database |
+
+**The platform base is not generated, and that is deliberate.** The base (postgres, keycloak, the compiled
+services, and the portal on `:8000`) is the platform's own `docker-compose.devbox.yml`, and it **travels
+inside the published devbox image**. `dev --stack` prints the `docker cp` that extracts it. abcli does not
+carry a copy, because a copy is a second source of truth that drifts from the first — silently, which is the
+one failure mode this whole toolchain is built to refuse.
+
+The MFE is served at **`/apps/<id>/`** — the app-id canon (#39), derived from your `id`, never read from a
+registry. A live registry was once observed serving `/apps/<id>-service/`; that registry was the violation,
+and reading the path from it would have baked one service's bug into every app this generator ever writes.
+
+**Your devbox image must be recent.** The stack's edge needs three *global* nginx directives that live in
+the base conf shipped inside the image (the fat-JWT header buffer, the exact-match OIDC callback, and the
+same-origin flag). They landed on 2026-07-17; an older image does not carry them, and the generated routes
+being perfect will not save you. It is the same frontier as the app-id canon — a pre-fix image also carries
+the registry that serves `/apps/<id>-service/` — so one pull closes the whole bundle.
+
+Recognise it by the symptom, because none of these say "old image":
+
+| you see | it is |
+|---|---|
+| the portal loads but lists **0 apps** | the MFE path canon — old registry |
+| every `/api` call with a Bearer returns **400** | the header buffer — the persona JWT is ~10KB |
+| login redirects to **"Page not found"** | the OIDC callback proxying to Keycloak instead of the SPA |
+| the SPA calls `localhost:<port>` your browser cannot reach | the same-origin flag missing |
+
+All four: `docker pull` the devbox image and re-run.
+
+> **Honest status:** the artifacts mirror a stack that was proven by hand on a real docker host — every
+> nginx line in them was falsified there, and each one silently breaks the portal when dropped. abcli has
+> **not** booted them itself. Treat your first run as the falsification, not as a formality, and file what
+> you find.
 
 ---
 
@@ -219,6 +290,20 @@ GitHub UI:
 Exit codes are script-friendly: `0` every posted verdict succeeded · `1` any failure · `2` still pending
 (no verdict yet is *pending*, never success). Reading the receipt uses the same GitHub identity that
 pushed — no extra token, no extra surface.
+
+#### An EMPTY receipt is the one thing `--status` cannot resolve for you
+
+If the receipt carries **no verdict at all**, two states look byte-identical on the wire:
+
+- **not yet** — the environment converges on a cycle and has not reached your sha;
+- **never** — your app is not one of the environment's discovery *candidates*, so no cycle will ever post
+  a verdict on it.
+
+`--status` says so plainly, and tells you **how long** it has been empty — the one datum abcli owns. What it
+will **not** do is guess: only the host knows its candidate list, and rebuilding that list on the client
+would be a *second verdict*, the exact failure mode the conformance plane exists to prevent. If the receipt
+stays empty across a few cycles, that is your answer — **ask iter-ops to confirm your app is in the dev-gate
+discovery list**, rather than waiting longer.
 
 ### Two ways `--front` alone used to hand you a receipt that could never arrive
 
@@ -333,10 +418,58 @@ abcli px hook uninstall
   - **`nudge` (the default)** — check `/wake` ONCE and release. For an **interactive, Principal-facing
     session**: a holding poll would FREEZE it between turns (it looks stuck to the human). Fail-open — an
     empty check, a superseded session, or a down radio all release at once.
+
+    **It is ADAPTIVE**, because "no mail" means two opposite things. *No mail, conversation dead* → release,
+    as always. *No mail, but a thread of yours is still awaiting its answer* → **poll instead of releasing**
+    (every `--conv-every`, default 60s, for up to `--conv-timeout`, default 15 min). Without this, you answer
+    with `over`, the hook checks, the peer replies 40 seconds later — and the reply sleeps until a human says
+    *"check your px"*. The channel exists so the human is not the postman; a nudge that cannot wait makes him
+    the **alarm clock**, which is worse.
+
+    It disarms on any of four: the reply lands (bell), the peer closes the thread (`out`), another session
+    claims the listen, or the ceiling is reached. It is **not** `listen` — it holds only while a real exchange
+    is open, and never past the ceiling. `install` also raises the settings `timeout` above that ceiling: a
+    hook killed before its loop could deliver would be a mode that looks installed and does nothing.
   - **`listen` (hold)** — HOLD and poll `/wake` until woken. For a **headless/idle fleet agent** that would
     otherwise be dead and unreachable. An empty check does not release — it polls again, bounded by Claude
     Code's `--timeout` on the hook (`--every`/`--timeout` apply to this mode only). `install --mode` switches
     modes idempotently.
+
+    ⚠️ **It covers an idle session, not a stopped one** — once the ceiling expires there is no next `Stop`
+    to re-arm it. See *A hold does NOT survive silence* below.
+
+### ⚠️ A hold does NOT survive silence — use `abcli px monitor` for that
+
+Measured on two agents on the same day: one sat stopped for **5h30**, the other for **1h00**, both with
+`--mode listen` armed and a working radio, and **neither was woken by the hook**.
+
+The reason is structural, not a bug: a hold only exists *between turns*. When it expires, **no process is
+left attached to the session** — so nothing can reach it, and there is no next `Stop` to re-arm it. The hold
+is strongest where it is least needed (a session already taking turns) and absent where it matters.
+
+```bash
+abcli px monitor          # arm with the harness's Monitor tool, persistent: true
+```
+
+`px monitor` polls the radio in a loop and prints one line per event. Armed as a background monitor, it
+**leaves a live process tied to the session**, which is what makes the wake possible with no turn to
+piggyback on. Both agents above were eventually woken by a background task, not by the hook.
+
+**The filter is emitted by abcli, not written by whoever arms it**, and that is deliberate. Both agents who
+designed these rules broke them in their own hand-written monitors within minutes of stating them — one of
+them twice in a day, in his live implementation. Three rules, each one asserted by the suite:
+
+1. **Seed without emitting.** The first pass records what is already waiting and says nothing; emitting it
+   fires one event per message already in the box, and monitors that emit too much are **stopped
+   automatically** — the new failure mode would kill the new watch in its first second.
+2. **One line per NEW id**, never per tick.
+3. **The radio's own failure is an event**, on the *transition*, both ways. Without it, radio-down and
+   inbox-empty are the same silence. On the transition only: a radio down for an hour would otherwise emit
+   80 events and disarm the watch that exists to notice it.
+
+Disarm with `TaskStop` on your own monitor — it has an author by construction, and it silences nobody else.
+That is the other half of what it fixes: the hook lives in **one user-level file shared by the whole box**,
+so any agent switching modes changes everyone, with no record of who. A monitor is per session already.
 
 The agent name is **not** in the commands (nexo and vero share this structure); `install --agent <you>`
 records it in **this worktree's** `.claude/px-agent` and the hooks resolve it from there at run time — never
@@ -437,6 +570,70 @@ Active waivers print on **every** check run, not behind a flag: a waiver nobody 
 meant to declare.
 
 ---
+
+## `abcli agents-sync` — the AGENTS.md workflow section, reconciled and freshness-stamped
+
+```bash
+abcli agents-sync              # SYNC the workflow section from the gold + print the freshness stamp
+abcli agents-sync --check      # THE GATE — fails on section drift (teeth); the stamp is advisory
+```
+
+The onboarding runbook rots one level above the scaffold: `AGENTS.md` carries a **copy** of "how to use
+`abcli` in this repo" that never re-syncs. `agents-sync` closes that — it is the AGENTS.md focus of the same
+per-section machinery `template` runs, welded to the **freshness plane**:
+
+- **The delta (local, deterministic).** The `<!-- abcli:section:workflow -->` block vs the bundled gold.
+  `--check` **fails** on drift — this has teeth, and it works offline, so it is safe as a CI gate. Without
+  `--check`, it **syncs** the section from the gold (every other section and all your prose untouched).
+- **The stamp (freshness).** abcli pins the contract version its golds were generated from and compares it to
+  the platform's published `contracts/VERSION` — the freshness oracle at `GET /api/platform/public/contracts`.
+  A `behind` stamp means the golds this abcli emits may be stale: bump abcli. The stamp is **always advisory**
+  — it **never** reddens the gate. It **fails open**: a `503` ("contract surface not shipped" — the server
+  fails closed, which is "don't know", not "zero drift"), a `404`, or no gateway at all (CI) all degrade to
+  "could not tell", never a false "up to date". Point it elsewhere with `--contracts-url` or
+  `$ABCLI_CONTRACTS_URL`.
+
+The teeth are on the deterministic local delta; the network-derived freshness is a *cutucão*, never a wall.
+
+---
+
+## Your 1x1 with the principal — and why it is NOT an abcli verb
+
+There is a durable channel of commitments between the principal and **one named agent** — you. PX dies
+at `out`, a decision dies at the answer; a commitment lasts.
+
+⚠️ **The verb belongs to the motor, not to this tool**, and that is a decision rather than an omission.
+The placement doctrine says *first match wins, top down*: this channel works for any work-type and
+carries no domain, so it is layer 1. An `abcli backlog` would be this layer mirroring the other one's
+state — and a mirror is one more thing that drifts.
+
+```bash
+abconvoy backlog <your-name>                   # what you two have pending, and how long since you met
+abconvoy backlogs                              # every pair
+abconvoy backlog-add <your-name> --title "…"   # ONLY when he said to put it there
+abconvoy backlog-close <id> --status retired --reason "…"
+abconvoy backlog <your-name> --review          # stamp it AFTER you have shown him
+```
+
+**If you get `coord database not reachable`**, your worktree does not know which coord DB to use. Point
+it at the square you serve:
+
+```bash
+COORD_DOTENV=/workspaces/platform/.abconvoy.env abconvoy backlogs
+```
+
+### The three ways to poison it
+
+**It never interrupts.** No bell, no emission, no nudge, no badge. If you find yourself wanting to page
+somebody about an item, that item was a PX message or a decision — not this.
+
+**An item enters only when he says so**, in a live turn. ⚠️ **The engine cannot witness that exchange**
+— it records who *claims* to have written the line. Filing what you think you are owed poisons the
+channel quietly, and nothing will stop you.
+
+**`--review` means he SAW it, not that you read it.** The stamp is on the **pair**: once set, no other
+session of yours brings him the list again today. Stamping after a look you never showed him buys a day
+of silence and he never finds out.
 
 ## The feedback channel
 
