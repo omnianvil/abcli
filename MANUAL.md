@@ -597,6 +597,45 @@ The teeth are on the deterministic local delta; the network-derived freshness is
 
 ---
 
+## `abcli vix` — verify an ADR-113 metadata set, and draw it
+
+The metadata of ADR-113 carries **N graphs of different shapes over one set of nodes** — composition
+(a tree, capped at four levels), type inheritance (a tree), field dependency (a DAG), and entity
+inheritance (multi-parent). In JSON they do not read. `vix` verifies the set and draws it.
+
+```bash
+abcli vix apps/<app>/metadata              # verify the set
+abcli vix apps/<app>/metadata --fixtures   # prove it REFUSES (the invalid/ corpus)
+abcli vix apps/<app>/metadata --graph      # the graphs, as mermaid
+```
+
+⚠️ **It is a verifier first.** The drawing is how the refusal explains itself. If scope is ever cut,
+the pretty half goes and the refusing half stays — a visualiser that only draws valid metadata is a
+shop window, and the final gate here is a human eye landing on generated output.
+
+**Three verdicts, never two:** `✗` refused · `?` could not verify · `✓` passed. The third is not
+politeness. One fixture asserts a defect the model has no construct to express (`atLeastOneOf` catches
+NONE and is blind to BOTH), so approving it would be green over a real defect and refusing it would be
+a refusal with no grounds. It comes out `UNRESOLVED`, said out loud, and it moves on its own the day
+the model gains the construct.
+
+### The two laws
+
+**A reference that does not resolve is a defect, never "no constraints."** Two of the known defects
+fail OPEN: an `extends` that does not resolve, or a type with no `primitive`, constrains nothing — so
+every instance test passes. The typo does not produce an error; it produces the *absence of
+verification*.
+
+**Not being reached is no excuse not to look.** Measured on the first corpus: 26 of 49 types were
+islands, referenced by nothing. A verifier that walks down from the views visits 23 of 49 and calls the
+whole thing clean.
+
+### `--fixtures` judges the rule the fixture NAMES
+
+Not the worst verdict anywhere in the set. A fixture asserts ONE defect; if the set happens to be
+incomplete elsewhere, that must show up as *collateral*, reported separately — never as the fixture's
+verdict. Red for the wrong reason and green for the wrong reason are the same bug.
+
 ## Your 1x1 with the principal — and why it is NOT an abcli verb
 
 There is a durable channel of commitments between the principal and **one named agent** — you. PX dies
