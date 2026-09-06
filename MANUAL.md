@@ -609,9 +609,16 @@ abcli vix apps/<app>/metadata --fixtures   # prove it REFUSES (the invalid/ corp
 abcli vix apps/<app>/metadata --graph      # the graphs, as mermaid
 ```
 
-⚠️ **It is a verifier first.** The drawing is how the refusal explains itself. If scope is ever cut,
-the pretty half goes and the refusing half stays — a visualiser that only draws valid metadata is a
-shop window, and the final gate here is a human eye landing on generated output.
+**It is a VISUALISER**, and it is heading for an editor. The Principal asked for a way to SEE the
+compositions — *"não vou ficar chafurdando um monte de arquivo json pra entender a estrutura"* — and
+that is the requirement.
+
+⚠️ I INVERTED THIS ONCE AND IT WAS NOT MINE TO INVERT. I argued that the gate was what made it worth
+having and that the drawing was how the gate explained itself; the issue got renamed from *visualizador*
+to *verificador* on the strength of it, without asking him. The argument was not wrong on its own terms —
+a viewer that only ever draws valid metadata is a shop window — but it answered a question nobody had
+asked, and it quietly replaced a requirement. Verification is a FEATURE of the viewer, not the other way
+round.
 
 **Three verdicts, never two:** `✗` refused · `?` could not verify · `✓` passed. The third is not
 politeness. One fixture asserts a defect the model has no construct to express (`atLeastOneOf` catches
