@@ -1,12 +1,11 @@
 # abcli
 
-> **Status:** Phase 0 (early development) — internal-only.
-> **Future home:** standalone repository (see [`../../internal-docs/ITER-CLI-AGENTS-PLAN.md`](../../internal-docs/ITER-CLI-AGENTS-PLAN.md)).
+> **Status:** shipped, standalone, closed. Consumers run the **compiled binary** from
+> [`omnianvil/abcli`](https://github.com/omnianvil/abcli) (public releases, no wheels, no source).
 
-`abcli` is the architectural enforcement and code-generation toolchain
-for the ITER SUITE. It validates that committed code conforms to the
-project's architectural decisions (ADRs) and — in later phases — generates
-new applications, services and tests that already conform out of the box.
+`abcli` is the architectural enforcement and code-generation toolchain. It validates that committed
+code conforms to a repository's architectural decisions (ADRs), and generates applications, services
+and tests that already conform out of the box.
 
 > ### [`MANUAL.md`](MANUAL.md) is the PUBLIC manual — editing it publishes
 >
@@ -18,33 +17,41 @@ new applications, services and tests that already conform out of the box.
 > the same PR, and `test_manual_documents_the_binary.py` refuses a verb the
 > binary exposes and the manual never names.
 
-## Why this directory exists separately
+## The boundary — and the thing that verifies it
 
-This folder is treated as if it were already a standalone repository. From
-day 1, no code outside `tools/abcli/` imports from it, and nothing
-inside `tools/abcli/` imports from `apps/`, `backend/`, or `packages/`.
+`abcli` is standalone. One verb, and one only, depends on a consumer's code:
 
-When the spinoff happens, the migration is a single command:
+| module | why |
+|---|---|
+| `seed_cmd.py` | `seed` operates on the platform's own manifests (`omnianvil.core.seed`) |
 
-```bash
-git filter-repo --subdirectory-filter tools/abcli
-```
+The rules that hold it there, each with a test in
+[`agents/tests/test_boundary.py`](agents/tests/test_boundary.py):
 
-See **§3 — Target Architecture** of the implementation plan for the full
-boundary contract.
+1. **nothing imports a consumer's package at module level** — `abcli` must start on a box where that
+   package does not exist, which is every box a consumer runs it on;
+2. **the coupled modules are a declared list** — a new one fails the build until someone writes down
+   the reason. Without this the first rule is satisfied by any lazy import, and the coupling grows one
+   module at a time, each step defensible, with no place anyone has to say it out loud;
+3. **the coupled verb refuses with a sentence**, not a `ModuleNotFoundError`. A closed binary has no
+   source beside it to undo the misreading, and *"abcli is broken"* is what a traceback says when the
+   truth is *"this verb is not for here"*.
+
+> This section replaces one that promised a boundary and had **no verifier**. It claimed nothing
+> imported from `apps/`, `backend/` or `packages/` while `seed_cmd.py` imported the platform, and it
+> named a `backend/` folder that had been deleted. **A promise without a test is a declaration, and
+> every new import makes it dearer in silence.** (Named by @nexo, who measured it.)
 
 ## Directory layout
 
 ```
-tools/abcli/
-├── rules/         # YAML rule definitions (one per ADR)
-├── fixtures/      # Pass/fail fixtures for each rule (regression suite)
-├── runner/
-│   ├── bash/      # Phase 0 — Bash + ripgrep + yq implementation
-│   └── go/        # Phase 0.5 — single static binary (deferred)
-├── tests/         # run-fixtures.sh and friends
-├── agents/        # Phase 1+ — Python + LangGraph agentic factory
-└── docs/          # CLI's own documentation
+rules/         # YAML rule definitions (one per ADR)
+fixtures/      # Pass/fail fixtures for each rule (regression suite)
+runner/bash/   # the Bash runner
+tests/         # run-fixtures.sh and friends
+agents/        # the Python CLI (click) — check, vix, px, pin, hooks, scaffolding
+clients/       # the VS Code extensions (Vix)
+docs/          # the CLI's own documentation
 ```
 
 ## Phase status
