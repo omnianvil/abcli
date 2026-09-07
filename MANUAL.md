@@ -64,6 +64,32 @@ It **never fails** — a stale pin exits 0, always. Reproducibility is the whole
 that broke your build over a rule you never opted into would be a tool you were right to distrust. It only
 tells you. And if it cannot reach the release feed it says *that*, rather than reassuring you.
 
+### `abcli ci-install` — the CI step, emitted and not copied
+
+```bash
+abcli ci-install            # the bash step, to stdout
+abcli ci-install --yaml     # wrapped as a ready-to-paste GitHub Actions step
+```
+
+It emits a step that resolves **this repo's pinned** abcli (`.abcli.lock`), fetches it when absent,
+**verifies the sha256**, and puts it on the PATH as `abcli`. Nothing but `bash`, `curl` and
+`sha256sum` — and **no token**: the release repo is public.
+
+**It is byte-for-byte the same resolver the pre-commit hook runs**, and that is the whole point. A
+consumer's CI once ran a *vendored working copy* of the checker — no pin, no version — while everyone
+else ran the signed binary. Eight of the nine rules matched. The ninth told whoever read the CI message
+to do the opposite of what the real rule wanted. **The same command, the same rule, two programs.**
+
+Which is also why this is a verb and not a snippet in a README: a snippet is copied, and a copy is a
+fork that ages on its own.
+
+One difference from the hook, deliberate: **in CI an unpinned repo REFUSES** (exit 1). The hook only
+warns — blocking someone's commit because the repo owner has not pinned yet taxes the wrong person —
+but a warning in a CI log is read by nobody and blocks nothing, and an unpinned CI gate is the exact
+defect this mechanism exists to kill.
+
+---
+
 ---
 
 ## The gate
