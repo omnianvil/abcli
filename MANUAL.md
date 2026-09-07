@@ -94,6 +94,55 @@ defect this mechanism exists to kill.
 
 ## The gate
 
+
+### `abcli docs personas` — a lista, do sítio onde ela é declarada
+
+```bash
+abcli docs personas --json     # ["user","admin","implementation","dev"]  (UMA linha)
+abcli docs personas            # uma por linha, para olhos
+```
+
+Existe para apagar um acoplamento por cópia à mão: um gate de CI trazia a lista escrita, com um
+comentário *"kept in sync with docs_cmd.py"* — e **uma cópia mantida por um comentário não é mantida
+por nada.** Nem o interpretador a acusa.
+
+**Consome o `--json`, não o outro.** Com `json.loads(check_output(...))` uma saída malformada
+**rebenta**. Com `.splitlines()` sobre a forma humana, uma linha vazia ou um aviso de depreciação
+entra em silêncio e vira uma persona — e o teu gate passa a validar uma audiência que não existe, sem
+erro nenhum.
+
+### Os quatro códigos de saída — e o que um CI faz com eles
+
+```
+0  varreu e está limpo
+1  varreu e VIOLOU
+2  mal configurado (nenhuma regra empacotada)
+3  NÃO CONSEGUI VERIFICAR — uma regra rebentou, ou não encontrou ficheiro nenhum
+```
+
+**Um CI que trate `!= 0` como «violou» vai acusar pessoas por um `3`.** O `3` não acusa ninguém: quer
+dizer que o portão não correu, não que falhaste. Mandar um autor procurar defeitos por causa de um `3`
+é o defeito que este código existe para impedir — nove crashes já foram renderizados idênticos a nove
+achados, e o autor foi caçar coisas que não existiam.
+
+```bash
+abcli check .; rc=$?
+case $rc in
+  0) ;;
+  1) echo "::error::ADR violations"; exit 1 ;;
+  3) echo "::error::o portao NAO CONSEGUIU VERIFICAR — isto nao acusa ninguem"; exit 1 ;;
+  *) echo "::error::abcli check saiu $rc"; exit 1 ;;
+esac
+```
+
+Falha nos dois casos — deve falhar — mas quem lê o log fica a saber qual dos dois aconteceu. **Sem
+isso, todo o trabalho de separar os estados morre na tua última linha.**
+
+E as duas contagens saem **separadas**, nunca somadas: `1 of 9 violated` ao lado de `8 não chegaram a
+ser avaliadas`. «Não consegui verificar» e «falhaste a verificação» mandam-te a sítios diferentes, e
+só um deles tem alguma coisa para encontrar.
+
+
 ```bash
 abcli check                    # the ADR quality-gate on this repo
 abcli check --staged           # only what git has staged  (what the hook runs)
