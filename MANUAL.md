@@ -126,7 +126,8 @@ dizer que o portão não correu, não que falhaste. Mandar um autor procurar def
 achados, e o autor foi caçar coisas que não existiam.
 
 ```bash
-abcli check .; rc=$?
+rc=0
+abcli check . || rc=$?          # ⚠️ `|| rc=$?`, NUNCA `abcli check .; rc=$?`
 case $rc in
   0) ;;
   1) echo "::error::ADR violations"; exit 1 ;;
@@ -134,6 +135,13 @@ case $rc in
   *) echo "::error::abcli check saiu $rc"; exit 1 ;;
 esac
 ```
+
+⚠️ **O `|| rc=$?` não é estilo — é o que faz o `case` existir.** Esta página ensinou
+`abcli check .; rc=$?` durante meses, e no GitHub Actions o shell por omissão é `bash -e {0}`: o script
+**morre no primeiro código não-zero**, antes da linha do `rc`. O @nexo mediu-o no `adr-compliance.yml` da
+plataforma — zero ocorrências das três mensagens no log real, com controlo. O `case` estava lá, correcto,
+e nunca foi impresso. E o passo que o `abcli plan` emitia era pior: `./abcli check .` a seco, portanto
+**nenhum chamador, em repo nenhum, alguma vez distinguiu o 1 do 3** (corrigido no plano v7).
 
 Falha nos dois casos — deve falhar — mas quem lê o log fica a saber qual dos dois aconteceu. **Sem
 isso, todo o trabalho de separar os estados morre na tua última linha.**
@@ -159,6 +167,54 @@ gatekeeping: a `require:` clause is only a *proxy* for the intent, and a develop
 satisfy the proxy **without** the intent — `adr-031` matches an import line, so publishing the detector makes
 a dead import the way past. **You publish the dish, not the recipe.** The waiver comment stays public,
 though: a declared exception lands in a diff where a reviewer sees it, and an evasion never does.
+
+### `--format json` — o veredicto inteiro, para agentes e CI
+
+```json
+{"exit_code": 3, "rules_total": 10, "violated": [], "violations": [],
+ "unevaluated": [{"rule": "adr-058-fixtures-tenant", "why": "nao encontrou ficheiro NENHUM…"}],
+ "no_subject": ["adr-058-fixtures-tenant"],
+ "declared_inapplicable": [{"rule": "…", "reason": "…", "owner": "…"}],
+ "false_declarations": []}
+```
+
+A chave `violations` é a **mesma** do `--staged` (uma forma, não duas). As `unevaluated` são o que o
+veredicto de texto diz em palavras: o que **não** foi certificado.
+
+⚠️ **A flag existia e devolvia texto** no caminho do repo inteiro — o `fmt` só *silenciava*, e silenciava
+justamente o terceiro veredicto. No `--staged` sempre emitiu JSON a sério, com um teste a guardá-lo: havia
+teste da flag, na porta que ninguém usava. Medido pelo @maratona no `omnianvil/provider`, que queria
+comparar as regras não avaliadas com uma lista declarada e ficou sem base.
+
+### `.abcli-adr.waivers` — declarar que uma regra NÃO SE APLICA a este repo
+
+Uma regra sem sujeito num repo onde as outras vêem ficheiros dá `3` — e **com razão**: «zero violações
+sobre zero ficheiros» e «zero violações sobre 68» saem com as mesmas palavras, e a diferença é tudo. Mas um
+repo que legitimamente não tem aquele assunto ficava condenado ao `3` para sempre, sem saída. O
+`omnianvil/provider` **nunca teve um CI verde desde que nasceu** por causa disto: é um serviço único, não um
+monorepo, e duas das dez regras não têm sujeito lá por desenho.
+
+```jsonc
+// .abcli-adr.waivers      no TEU repo — cai num diff, onde um revisor a lê
+{
+  "adr-031-analytical-repository": {
+    "reason": "este repo e' um servico unico; nao ha repositorio analitico",
+    "owner": "papi"
+  }
+}
+```
+
+- **Sem `reason` ou sem `owner`, a entrada é ignorada.** É o `# noqa` que recusamos: sem dono não há revisão.
+- **Aparece em TODAS as corridas**, nunca atrás de uma flag — uma dispensa que ninguém vê é a deriva que ela
+  foi declarada para impedir.
+- ⚠️ **E é FALSIFICÁVEL**: no dia em que um ficheiro casar o glob da regra dispensada, o portão fica
+  **vermelho** e diz quantos, nomeando quem declarou. Uma dispensa que nunca pode ficar vermelha não é uma
+  decisão — é cegueira com papelada.
+- **Não aponta o glob para o vazio.** Isso devolveria `0` sobre conjunto vazio: verde a mentir, que é pior
+  que o vermelho honesto. O glob fica onde está; o que muda é alguém **decidir**, com nome.
+
+Vive no teu repo e não na regra de propósito: o `explain` guarda o detector como privado (publicar como a
+regra decide ensina a evadi-la), e a dispensa é o contrário — pública e declarada.
 
 > **If a gate misfires on your code, that is not something to work around quietly.** It is a `question`
 > issue, and it is the fastest way to get the rule fixed. See [feedback](#the-feedback-channel).
@@ -303,6 +359,174 @@ All four: `docker pull` the devbox image and re-run.
 > nginx line in them was falsified there, and each one silently breaks the portal when dropped. abcli has
 > **not** booted them itself. Treat your first run as the falsification, not as a formality, and file what
 > you find.
+
+---
+
+## `abcli devload` — package your app locally and hand it to a named cluster
+
+```bash
+abcli devload --cluster <slug>                     # THE act: package locally AND deliver
+abcli devload --pack-only --out ./pkg              # produce the package and do NOT deliver
+```
+
+⚠️ **One act, one verb.** Packaging and delivering are not two steps you chain — they are the two
+halves of the same thing, which is why there is a `--cluster` and not a `pack` followed by a `push`.
+There is **no default**: you either name the cluster or you say you are not delivering. A default that
+did not deliver would be the flag that one day skips the delivery with nobody noticing.
+
+**`--cluster` never reports "delivered" on the route's word alone.** The route answers `200` only
+when the app is serving — and then `devload` asks for the app's `remoteEntry` **through the edge**,
+the way a browser will. Two instruments, looking at the same door from different sides:
+
+
+**This is not `publish`, and that is deliberate.** They are two *stations*:
+
+| | who decides | front goes to | the app |
+|---|---|---|---|
+| **production** | the operator, from cluster-admin | bucket / CDN | stays |
+| **development** | the programmer, with `devload` | the web container (no CDN) | is replaced at will |
+
+If they shared a verb, someone would eventually build one path that serves both — and it would serve
+both badly. **The verb carries the station in its name**: nobody runs `devload` thinking they are
+installing to production. The flag people forget is inside the word. (ADR-116, which deliberately
+reopens ADR-104 and says which of its two reasons fell and which did not.)
+
+### What travels: exactly what your app declares
+
+Your app declares its delivery in `omni.config.json`, relative to the app's root:
+
+```json
+"delivery": {
+  "frontend": "frontend/dist",
+  "backend": "backend",
+  "requirements": "backend/requirements.txt"
+}
+```
+
+`devload` copies each declared path into the package **at the same relative path**, and writes the
+block into the package's `omni.config.json` **verbatim**. That is how the cluster reads it: the route,
+the app-runtime supervisor and the installer all resolve `delivery` against the package root. There is
+one description of where things are, and it is yours.
+
+```
+frontend      the BUILT bundle — your machine builds it, the cluster does not
+backend       SOURCE (.py), never a wheel
+requirements  YOUR requirements file, byte for byte — devload does not compile one
+```
+
+⚠️ **The backend travels as source because your machine's architecture must stay irrelevant.** A dev
+on AMD has to be able to hand a package to an ARM cluster. A wheel with compiled extensions is
+architecture-specific and would break that; transpiled TS is neutral, the backend would not be.
+
+### The requirements are yours, and devload does not rewrite them
+
+An earlier `devload` compiled its own lock from `pyproject.toml`. Measured against the sample-app
+before the first real delivery, that lock carried `-e ../../../packages/py/omnianvil-core` — a
+monorepo path that does not exist in the container — and a `fastapi` pin that was not the image's.
+The app-runtime image already carries the compiled core and the third-party packages it was compiled
+against: listing the core would shadow the one the platform runs, and a drifted pin replaces a
+package the core depends on, which **changes behaviour without an error**. The file you declare is
+the one that knows this; a lock derived beside it was a second source of truth, and it was winning.
+
+The supervisor **skips `pip install` when the requirements' sha256 has not changed**. `devload` prints
+that `lock sha256` — the hash of your declared file, as it travels — so you can compare it without
+opening the package.
+
+### What it refuses, on purpose
+
+| | |
+|---|---|
+| no `delivery` declared (or no `backend`/`requirements` in it) | **refuses** — it will not invent a package layout or a lock for you; the refusal shows the block to add |
+| a declared path that does not exist | **refuses**, naming the key |
+| a declared path that is absolute or climbs out with `..` | **refuses** — the package is your app, not your disk |
+| the declared frontend is not built | **refuses** — packaging an unbuilt front raises no error anywhere: the package ships, the delivery runs, and the app serves an empty directory. The symptom shows up in someone else's browser, far from the cause |
+| the declared frontend exists but is empty | **refuses** — a half-finished build is not a build |
+| no `omni.config.json` | **refuses** — an app is identified by its manifest |
+
+A backend-only app declares no `delivery.frontend`, and that is legitimate: nothing is packed for the
+front and the route returns no `remoteEntry` to check.
+
+`__pycache__` never travels: it is bytecode from *your* machine, and carrying it is the same class of
+error as the wheel, in miniature.
+
+### What `--cluster` checks, in order — cheapest refusal first
+
+```
+configuration  →  password at rest  →  who answers  →  platform version  →  package  →  authenticate  →  (send)
+```
+
+Everything up to the version is **local or public**: a wrong cluster or a committable `.env` refuses
+before a package is built and before a password leaves your machine. Packaging comes *before*
+authenticating on purpose — a wasted package costs time here; a wasted authentication sends a
+password over the network for nothing.
+
+**Configuration** — per cluster, in the private `.abcli.env`. The slug is kebab, the key is snake:
+
+```
+ABCLI_CLUSTER_SEALED_CLUSTER_URL=https://sealed.itersuite.com    # the apex only
+ABCLI_CLUSTER_SEALED_CLUSTER_USER=external-apps/sample-app       # your publisher id, slash included
+ABCLI_CLUSTER_SEALED_CLUSTER_PASSWORD=…
+```
+
+⚠️ If you write the dash (`ABCLI_CLUSTER_SEALED-CLUSTER_URL`), the shell would not export it — but
+`.abcli.env` is loaded by `dotenv`, which **does**, under the wrong name. You would see the line and be
+told the URL is missing. The refusal now names the near-miss and the right spelling. There is **no
+default cluster**: a mistyped slug stops here instead of delivering somewhere else.
+
+**Who answers** — `GET /api/platform/public/environment` (public, no credentials) returns the cluster's
+own identity, and it must equal `--cluster`. If your URL points at another cluster, `devload` refuses
+and names both. If the cluster does not say who it is, it **also refuses**: nothing downstream checks
+this again.
+
+**Platform version** — compared against your manifest's `requires.platform`. It never refuses (the
+cluster's package index is the real gate at install time), but it never stays quiet either:
+
+| | |
+|---|---|
+| matches | silent |
+| differs | warns, continues — if install fails to resolve, start looking here |
+| cluster declares none | warns that it **could not compare**, continues — normal where no installer provisioned |
+
+**Authenticate** — Keycloak password grant against the `iter-devload` client. The three refusals that
+can share an HTTP 401 are told apart by Keycloak's `error`, because they send you to different places:
+
+| | means | do |
+|---|---|---|
+| `invalid_grant` | your user or password is wrong | fix `.abcli.env` |
+| `invalid_client` / `unauthorized_client` | the cluster has **no `iter-devload` client** yet | nothing — **do not rotate your password**, it was never judged |
+| HTTP 404 | the token path is wrong (the `/auth` prefix) | fix the URL |
+
+A correct password blamed for a missing client is a developer rotating a credential that worked.
+
+### What you are told after sending
+
+| the route | the edge | `devload` says | exit |
+|---|---|---|---|
+| refuses | — | **the route's own sentence, verbatim** (a `403` "the dev-gate is off here" and a `403` "your publisher does not own that namespace" share a code and send you to different places) | 1 |
+| `200` | reaches the `remoteEntry` | **delivered** | 0 |
+| `200` | no front declared | **delivered** — backend-only app, nothing to verify from outside | 0 |
+| `200` | does **not** reach it (or answers with an HTML page — a login in front) | the platform says it is serving and the edge does not reach it: **the problem is between the container and the edge, not your package** | 1 |
+| `200` | cannot be asked | delivered inside, **not verified outside** | 3 |
+
+Anything that is not the platform's refusal envelope (a proxy's `502`, a router's `404` page, an
+uncaught crash) is said to be exactly that — **not** the route refusing. And a timeout does not mean
+"not delivered": the route is synchronous, so it may have finished — check the edge before re-sending.
+
+**Provenance.** `devload` sends the branch it was run from, and the commit **only when the app's tree is
+clean** — a devload is uncommitted work by nature, and sending `HEAD` for a package that holds changes
+`HEAD` does not have would be false provenance that looks exact.
+
+### Credentials
+
+The dev authenticates with a **Keycloak username and password** of the target cluster, kept in the
+private `.abcli.env`. A user in cluster A's realm does not exist in cluster B's — the refusal is the
+absence, so there is no shared-credential mode to get wrong.
+
+⚠️ **abcli refuses to run when a credential key lives in a file git would commit.** Not because the
+file sits inside a repository — it almost always does, and it also carries innocent config people
+commit on purpose. The discriminator is whether **git** would carry it (`git check-ignore`), and
+"cannot ask git" refuses too: for a password at rest, *don't-know* weighs like the danger, because
+the "later" of a committed secret is the history of every clone.
 
 ---
 
@@ -632,6 +856,28 @@ exactly where your content starts, and a test freezes that boundary as something
 
 `sync` splices the gold's **raw text** over yours, so every comment in your file — including the ones you
 wrote — survives byte for byte. `check` fails **closed**: if it cannot resolve the gold, that is not a pass.
+
+### One per-app key it DERIVES once: `backend.entry`
+
+`omni.config.json`'s `backend.entry` (`'module:attr'`, platform#932) is the ASGI app the cluster runtime
+starts. It is **yours** — there is no gold — but abcli can derive it from what your repo **contains**:
+
+| your backend has | derived |
+|---|---|
+| `app/main.py` | `app.main:app` (what `abcli new app` scaffolds, and declares) |
+| `main.py` | `main:app` |
+
+- `sync` writes it **only when it is missing**, and **never rewrites** a declared one. It inserts one line
+  into the `backend` object and leaves the rest of the file byte for byte — it is meant to land as a
+  reviewable one-line PR in your repo.
+- `check` **fails** when the declared value and the layout **disagree** — the discrepancy is the diagnosis,
+  and abcli will not pick a side for you. When it is missing, `check` only **notes** what `sync` would write:
+  a repo that has not received the line yet is not red for a key nobody gave it.
+
+The same rule decides the module everywhere abcli starts your backend — `abcli dev`, the plan's
+`build.yml` (plan v6), and `dev --stack` — declared first, detection only as the fallback, disagreement
+refuses. It used to be decided in four places, one of them a hard-coded `main:app`. Waive it like any other
+key, as `omni.config.json::backend.entry`.
 
 **The escape hatch, and its price.** A repo that must diverge declares it:
 
