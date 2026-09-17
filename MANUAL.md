@@ -216,6 +216,34 @@ monorepo, e duas das dez regras não têm sujeito lá por desenho.
 Vive no teu repo e não na regra de propósito: o `explain` guarda o detector como privado (publicar como a
 regra decide ensina a evadi-la), e a dispensa é o contrário — pública e declarada.
 
+#### Dispensa por GLOB — `"regra::glob"`
+
+Uma regra pode ter dois globos, um a alcançar o teu código e outro a nomear um arranjo que o teu repo não
+tem. Declarar a **regra** inaplicável aí seria desligar uma regra que **se aplica**:
+
+```jsonc
+{ "adr-037-uuid-v7::external-apps/*/backend/**/models.py": {
+    "reason": "este repo nao e' um repo de apps externas", "owner": "papi" } }
+```
+
+As duas chaves dizem coisas diferentes, e por isso são chaves diferentes:
+
+| chave | afirmação |
+|---|---|
+| `regra` | «esta regra não tem assunto neste repo» |
+| `regra::glob` | «este CAMINHO não existe neste repo» — a regra continua armada pelos outros globos |
+
+⚠️ **O detector do glob morto não sai, e é deliberado.** Ele existe por uma medição: duas regras varriam um
+caminho que não existia, alimentadas pelo glob irmão, e quando o caminho foi corrigido apareceram **88
+violações reais em 18 ficheiros**. O que faltava ao sinal era distinguir «o caminho mudou debaixo da regra»
+(defeito) de «este repo não tem esse caminho» (facto) — um sinal que responde igual em dois estados
+diferentes está a falar do instrumento, não do mundo.
+
+As duas dispensas são falsificáveis: a de glob fica **vermelha** no dia em que o caminho declarado como
+ausente passar a casar ficheiros. E uma dispensa que nomeia um glob que a regra **não tem** também é
+vermelha — ou a regra mudou os globos dela, ou o sidecar tem um engano; uma dispensa que não corresponde a
+nada não dispensa nada, e dá a impressão de que alguém decidiu. (Caso do @papi, `omnianvil/provider`.)
+
 > **If a gate misfires on your code, that is not something to work around quietly.** It is a `question`
 > issue, and it is the fastest way to get the rule fixed. See [feedback](#the-feedback-channel).
 
