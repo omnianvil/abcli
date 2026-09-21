@@ -726,22 +726,45 @@ it on every call:
 Both, or neither — a half-set pair is a confusing 401, not partial auth. On the box they are unset and
 nothing changes. If you hit the wall without them, the error names Cloudflare rather than blaming the API.
 
-**The Stop hook** — the footer needs a command to ride; a session with no terminal (an extension session,
-no TTY, no tmux) has none. Claude Code hooks reach it. Because ONE agent has MANY live sessions (an
-extension AND a tmux), the install wires **two** hooks and the radio arbitrates so a message wakes only ONE:
+### Your identity on the radio
 
 ```bash
-abcli px hook install --agent nexo                 # SessionStart→claim + Stop→listen; mode nudge (default)
-abcli px hook install --agent nexo --mode listen   # HOLD mode, for a headless/idle fleet agent
-abcli px hook uninstall
+abcli px identity nexo                 # writes <worktree>/.claude/px-agent
+abcli px identity nexo --repo-root X   # ...into X's worktree instead
 ```
+
+**It is per WORKTREE and never an environment variable**, and that is the law rather than a preference: two
+agents share a shell and a `~/.claude`, so a global would resolve to a SHARED name and report the other
+agent's mailbox — worse than reporting none. A swap is always announced (`identidade TROCADA: a → b`); it
+once happened silently and surfaced three commands later as a 422 from the radio.
+
+### ⚠️ The Stop hook is RETIRED — `px hook install` refuses
+
+`abcli` no longer generates it (Principal's decision, 2026-09-19). The vigil is a **monitor**, per session,
+armed by the `/wop` skill; the identity, which was the useful half of the old install, is the verb above.
+
+**Why a refusal and not a quiet no-op:** the hook it wrote was **user-level**. One invocation changed the
+behaviour of everything running on that box — the other agents included, none of them told. A silent no-op
+would leave whoever ran it believing their watch was armed.
+
+```bash
+abcli px hook uninstall --user   # a box that still carries the old hook cleans it here
+```
+
+⚠️ **`--user`, never `--local`.** Measured on two independent boxes: the worktree's `settings.local.json`
+was written **correctly** and the session **never read it** — what ran was the user-level hook. The right
+file on disk is not the same thing as the right hook in execution. It holds for removing exactly as it held
+for installing.
+
+The rest of this section describes what that hook **does where it is still installed**, because uninstalling
+it is a deliberate act and until then it keeps running:
 
 - **SessionStart → `px claim`** — each session, at start, claims the listen (`PUT /agents/<you>/session`).
   Last to claim wins; the others do not die, they go quiet (the `attach -d` model). Same in both modes.
 - **Stop → `px listen`** — checks `/wake` and, if mail is waiting for THIS active session, wakes with a
   **bell** (a count and a command, never a body — that text is injected into the woken session, so a body
-  would be an injection vector). A superseded session releases at once and stays quiet. Two modes, chosen by
-  `install --mode`:
+  would be an injection vector). A superseded session releases at once and stays quiet. Two modes, chosen by the
+  `--mode` of the install that put it there:
   - **`nudge` (the default)** — check `/wake` ONCE and release. For an **interactive, Principal-facing
     session**: a holding poll would FREEZE it between turns (it looks stuck to the human). Fail-open — an
     empty check, a superseded session, or a down radio all release at once.
@@ -755,12 +778,12 @@ abcli px hook uninstall
 
     It disarms on any of four: the reply lands (bell), the peer closes the thread (`out`), another session
     claims the listen, or the ceiling is reached. It is **not** `listen` — it holds only while a real exchange
-    is open, and never past the ceiling. `install` also raises the settings `timeout` above that ceiling: a
-    hook killed before its loop could deliver would be a mode that looks installed and does nothing.
+    is open, and never past the ceiling. The install raised the settings `timeout` above that ceiling: a hook
+    killed before its loop could deliver would be a mode that looks installed and does nothing.
   - **`listen` (hold)** — HOLD and poll `/wake` until woken. For a **headless/idle fleet agent** that would
     otherwise be dead and unreachable. An empty check does not release — it polls again, bounded by Claude
-    Code's `--timeout` on the hook (`--every`/`--timeout` apply to this mode only). `install --mode` switches
-    modes idempotently.
+    Code's `--timeout` on the hook (`--every`/`--timeout` apply to this mode only). `--mode` switched
+    between them idempotently.
 
     ⚠️ **It covers an idle session, not a stopped one** — once the ceiling expires there is no next `Stop`
     to re-arm it. See *A hold does NOT survive silence* below.
