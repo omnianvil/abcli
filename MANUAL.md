@@ -558,6 +558,61 @@ the "later" of a committed secret is the history of every clone.
 
 ---
 
+## `abcli platform-update` — bring an `omni` cluster's sources to a ref, and build packages by name
+
+```bash
+abcli platform-update --cluster omni                          # sources to `main`, build what MOVED
+abcli platform-update --cluster omni --ref 7fd908c            # pin a sha (see the first-clone note)
+abcli platform-update --cluster omni --build ui,core-auth     # build exactly those two packages
+abcli platform-update --cluster omni --build none             # fetch only, build nothing
+```
+
+⚠️ **This is not `devload`, and the credential is the difference.** `devload` delivers **one guest app**
+with the app publisher's keys. This verb changes **what the whole cluster runs**, so the platform opened a
+separate role for it (`cluster.platform.update`). It reads its own keys and never the publisher's pair:
+
+| | keys | what it can do |
+|---|---|---|
+| `devload` | `ABCLI_CLUSTER_<SLUG>_USER` / `_PASSWORD` | deliver one app, bounded by the dev-gate allowlist |
+| `platform-update` | `ABCLI_CLUSTER_<SLUG>_ADMIN_USER` / `_ADMIN_PASSWORD` | replace the cluster's platform sources |
+
+Both read the same `ABCLI_CLUSTER_<SLUG>_URL`: one cluster has one address.
+
+⚠️ **It never says «updated», because the route cannot promise it.** The platform composes its
+`PYTHONPATH` from the source volume **at container boot**, and the process answering your request is the
+one that would have to restart. `200` means *the sources are in the volume at this sha*. What is still
+missing is printed every time, and the front half is immediate (vite reads from disk per request) while
+the back half waits for a bounce.
+
+**Three verdicts, and the middle one is why the verb exists:**
+
+| exit | what it means |
+|---|---|
+| `0` | the sources are at the ref and every requested build finished |
+| `3` | **I do not know** — the wait ran out and the build is still running inside the `web` container |
+| `1` | refused, or a build failed, or there is no builder to run it |
+
+⚠️ **Running out of `--build-timeout` is not a failure.** Printing "failed" there would have operators
+re-launching a compilation that is already going. The verb says where to read the real outcome instead.
+
+⚠️ **A sha works on an update and fails on a FIRST clone.** An empty volume is cloned with
+`--branch <ref>`, which only takes a branch name; once the volume exists, a sha is fetched and checked
+out. Ask for a branch first, then pin the sha with a second call — the verb translates git's message,
+which otherwise names a *branch* you never mentioned.
+
+⚠️ **With no `--build`, the verb builds the packages this pull moved** — that is the client's default,
+and it is not the route's. The route keeps `[]`, because its other caller is step 3 of the installer, and
+`[]` meaning *changed* there would make every install pay for the whole package set. The word that asks
+for nothing is `--build none`, and the receipt says which of the two you are getting **before** the build
+runs.
+
+The reason the default builds: sources at a new sha while the front still serves the **old packages from
+the image** is the state that reads as «done» and is not — and when *this* pull moved packages that are
+still served from the image, the cluster's own warning is the last line you see. That is the state that
+takes the portal white. The list of what is still served from the image is printed either way.
+
+---
+
 ## `abcli publish` — put your app on the shared dev environment
 
 ```bash
