@@ -613,6 +613,117 @@ takes the portal white. The list of what is still served from the image is print
 
 ---
 
+## `abcli secret` — this tool's own vault, one per tool, nothing shared
+
+abcli keeps configuration and secrets in **two files, with one job each** (ABCLI-ADR-015):
+
+| | config | secrets |
+|---|---|---|
+| file | `.abcli.env` at the repo root | an **encrypted** vault, one per user |
+| may be committed | yes | never |
+| found by | the repo you are in | a **rule**, never a fixed path |
+
+**The vault is this tool's and no other's.** abcli reads no other tool's vault, and no other tool reads abcli's.
+If two tools need the same access, each gets **its own credential** — not two copies of one.
+
+**Where it is, first rule that answers wins:** `$ABCLI_SECRETS_FILE` → `$XDG_CONFIG_HOME/abcli/secrets.enc` →
+`~/.config/abcli/secrets.enc`. A variable that is set but blank is **said**, not silently skipped.
+
+```bash
+abcli secret status     # where the vault is, by WHICH rule, and whether this binary can seal one
+```
+
+```
+  vault   /home/you/.config/abcli/secrets.enc
+          absent — nothing stored yet · chosen by: default (~/.config)
+  key     a passphrase, asked on this terminal
+  crypto  ✓ ChaCha20-Poly1305 + scrypt — sealed and opened, and REFUSED a wrong key and a tampered blob
+```
+
+Exit `0` when the crypto is present **and refused** a wrong key and a tampered blob — a round-trip alone proves
+nothing, since a do-nothing cipher agrees with itself. Exit `1` means **this binary** cannot seal a vault: a build
+defect, never your configuration.
+
+**What encryption buys, in exactly these words:** protection against *accidents* — git, logs, backups, pasted
+output, a screen shared in a call. Not against someone with access to the same machine as you.
+
+```bash
+abcli secret set ABCLI_CLUSTER_OMNI_PASSWORD           # asked on the terminal, hidden, twice for a new name
+printf %s "$VALUE" | abcli secret set NAME --stdin     # headless: the VALUE from stdin
+abcli secret get NAME                                  # a fingerprint: sha256:1a2b3c4d · 24 chars
+abcli secret get NAME --reveal                         # the value itself, for a pipe
+abcli secret list                                      # the names, never a value
+abcli secret rm NAME
+abcli secret rekey                                     # a new passphrase; the values are untouched
+abcli secret import old.env                            # moves the secret-shaped keys in; never deletes old.env
+```
+
+**The value never goes on the command line.** `abcli secret set NAME=value` is refused, and the refusal tells you
+to treat the value as exposed and rotate it — it is already in your shell history and was visible in `ps`. The
+refusal never repeats the value.
+
+**The key.** A passphrase, stretched with scrypt. It comes from `ABCLI_SECRETS_KEY` when that is set (agents, CI —
+injected by whatever runs you, never written to a file), otherwise it is asked on the terminal. With neither, abcli
+refuses and names what it found. A new vault asks for the passphrase twice. **Lose the passphrase and you lose the
+vault** — there is no recovery, by design. `rekey` changes it; the old one stops working at once, so update
+`ABCLI_SECRETS_KEY` wherever it is injected.
+
+**What goes in.** Names ending in `_PASSWORD`, `_USER`, `_TOKEN`, `_SECRET` or `_KEY` — the same list the at-rest
+guard uses. A cluster's `_USER` travels with its `_PASSWORD`: half a credential in a committed file is half the way.
+Anything else is configuration and is refused here: it belongs in `.abcli.env`, where people can read it.
+
+**Moving to two files — this version WARNS, a later one refuses.** On every command, on stderr, never changing
+the exit code and never printing a value, abcli names three things the standard ends:
+
+| found | what to do |
+|---|---|
+| a secret in `.abcli.env` (a name ending in `_PASSWORD`, `_USER`, `_TOKEN`, `_SECRET`, `_KEY`, with a value) | `abcli secret import .abcli.env`, then delete those lines |
+| `publish` taking a key from the app's `.env` | move the line to `.abcli.env` — the `.env` is the app's |
+| a `.abcli.env` beside the installed abcli | move its keys to your repo's `.abcli.env`, then delete it |
+
+**How the verbs use it.** A verb that needs a secret the environment does not have opens the vault **at that
+moment, and only then**:
+
+| who is running | what happens |
+|---|---|
+| a person at a terminal | asked once for the passphrase — with a line saying which verb needs which name. Once per process. |
+| an agent or a CI with `ABCLI_SECRETS_KEY` | opened without asking. |
+| neither | the verb refuses and names what it found: the vault may hold it, and there is no key here. |
+
+`abcli check`, the pre-commit hook and any verb that needs no secret **never ask**. The radio footer never asks
+either — it rides someone else's command — and stays silent when the vault is locked.
+
+**Only the names a verb asked for enter its environment.** The rest stays in the vault, so a process that verb
+starts — a compose, a runner, a coding-agent CLI — does not inherit secrets it never needed.
+
+**Who wins:** a variable already in your environment, then `NAME_FILE=/path` (below), then the vault, then
+`.abcli.env`. A secret found in the config file loses to the same name in the vault.
+
+**A secret someone handed you in its own file stays there.** Put the PATH in `.abcli.env` — a path is
+configuration — and abcli reads the secret from the file when a verb needs it, never copying it anywhere:
+
+```bash
+# .abcli.env
+ABCLI_CLUSTER_OMNI_ADMIN_PASSWORD_FILE=/workspaces/.segredos/me/omni.cluster-admin.pass
+```
+
+Exactly one trailing newline is stripped. A pointer that leads nowhere — a missing, unreadable or empty file — is
+**said**, not quietly replaced by the vault's copy: somebody wrote it meaning that file.
+
+| verb | what it asks the vault for |
+|---|---|
+| `devload --cluster X` | `ABCLI_CLUSTER_X_USER`, `ABCLI_CLUSTER_X_PASSWORD` — never for `--pack-only`, which sends nothing |
+| `platform-update --cluster X` | `ABCLI_CLUSTER_X_ADMIN_USER`, `ABCLI_CLUSTER_X_ADMIN_PASSWORD` |
+| `px *` | `PX_KEY` (or `INTERNAL_SERVICE_KEY`), and `CF_ACCESS_CLIENT_SECRET` if the vault is open anyway |
+| `backlog *` | `COORD_API_TOKEN`, and `CF_ACCESS_CLIENT_SECRET` likewise |
+| inference (`docs gen`, `new`, …) | the provider's key — and a locked vault falls back to the local CLI, never a crash |
+
+⚠️ **A leftover px Stop hook does not know the vault.** The hook was retired on 2026-09-19 (the watch is a
+per-session monitor now), but a box where it was installed before still fires it, and it reads `PX_KEY` from the
+environment on its own. Remove it with `abcli px hook uninstall --user`.
+
+---
+
 ## `abcli publish` — put your app on the shared dev environment
 
 ```bash
@@ -761,8 +872,14 @@ exist). Set `ABCLI_PX_FOOTER=0` for silence.
 
 Configure the **transport** with two environment variables. Your **identity is NOT an env var** — it is
 recorded per worktree (see the hook section below), because nexo and vero share one environment and a
-process-wide variable cannot tell them apart. abcli **never guesses who you are**: no worktree identity means
-silence, because reporting somebody else's inbox is worse than reporting none.
+process-wide variable cannot tell them apart. abcli **never guesses who you are**: reporting somebody else's
+inbox is worse than reporting none.
+
+**Missing configuration has two altitudes, and they answer differently.** The footer goes *silent* — it is a
+nudge riding someone else's command and has no standing to interrupt it. A `px` verb you TYPED **refuses,
+and names which of the three pieces it found missing**, one line each, distinguishing *absent* from
+*present but blank* — the second is the one you stare past, because the line is already in your file. It
+never prints the key's value, only which variable supplied it.
 
 | var | meaning |
 |---|---|
