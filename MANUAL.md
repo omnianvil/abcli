@@ -658,6 +658,10 @@ abcli secret rekey                                     # a new passphrase; the v
 abcli secret import old.env                            # moves the secret-shaped keys in; never deletes old.env
 ```
 
+**The trailing newline, for `--stdin` and for `NAME_FILE`:** a single-line value's newline is transport (the
+`echo`) and is cut; a multi-line value's is content (a PEM key ends in one) and is **kept byte for byte**. The
+receipt says which happened — never silently.
+
 **The value never goes on the command line.** `abcli secret set NAME=value` is refused, and the refusal tells you
 to treat the value as exposed and rotate it — it is already in your shell history and was visible in `ps`. The
 refusal never repeats the value.
@@ -667,6 +671,10 @@ injected by whatever runs you, never written to a file), otherwise it is asked o
 refuses and names what it found. A new vault asks for the passphrase twice. **Lose the passphrase and you lose the
 vault** — there is no recovery, by design. `rekey` changes it; the old one stops working at once, so update
 `ABCLI_SECRETS_KEY` wherever it is injected.
+
+**A passphrase is one line.** Creating a vault or rekeying with one that contains a newline is refused, and
+when a vault does not open with an `ABCLI_SECRETS_KEY` that ENDS in a newline, the refusal says so — before its
+"or the file was altered", which the cipher has to say and which is the expensive thing to believe.
 
 **What goes in.** Names ending in `_PASSWORD`, `_USER`, `_TOKEN`, `_SECRET` or `_KEY` — the same list the at-rest
 guard uses. A cluster's `_USER` travels with its `_PASSWORD`: half a credential in a committed file is half the way.
@@ -699,6 +707,9 @@ starts — a compose, a runner, a coding-agent CLI — does not inherit secrets 
 **Who wins:** a variable already in your environment, then `NAME_FILE=/path` (below), then the vault, then
 `.abcli.env`. A secret found in the config file loses to the same name in the vault.
 
+**When a cluster refuses the credentials, the refusal says where each one came from** — the environment,
+`.abcli.env`, a `NAME_FILE` (with its path) or the vault — so you fix the place it actually came from.
+
 **A secret someone handed you in its own file stays there.** Put the PATH in `.abcli.env` — a path is
 configuration — and abcli reads the secret from the file when a verb needs it, never copying it anywhere:
 
@@ -707,7 +718,7 @@ configuration — and abcli reads the secret from the file when a verb needs it,
 ABCLI_CLUSTER_OMNI_ADMIN_PASSWORD_FILE=/workspaces/.segredos/me/omni.cluster-admin.pass
 ```
 
-Exactly one trailing newline is stripped. A pointer that leads nowhere — a missing, unreadable or empty file — is
+The newline rule is the same as `--stdin`'s (below). A pointer that leads nowhere — a missing, unreadable or empty file — is
 **said**, not quietly replaced by the vault's copy: somebody wrote it meaning that file.
 
 | verb | what it asks the vault for |
