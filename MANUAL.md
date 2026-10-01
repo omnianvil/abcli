@@ -496,6 +496,18 @@ ABCLI_CLUSTER_SEALED_CLUSTER_USER=external-apps/sample-app       # your publishe
 ABCLI_CLUSTER_SEALED_CLUSTER_PASSWORD=…
 ```
 
+**Or one value: a service account.** Instead of `_USER` + `_PASSWORD`, an agent keeps its own account's
+single value (`omni-sa1.…`, shown ONCE by the tenant-admin console) in the vault:
+
+```bash
+abcli secret set ABCLI_CLUSTER_SEALED_CLUSTER_TOKEN --stdin    # paste the whole value, end with Ctrl-D
+```
+
+`_URL` is still needed: the credential carries its own `tokenUrl`, and **its origin must be `_URL`'s**, or
+nothing is sent (the secret goes only to the cluster you named). A `_TOKEN` beside `_USER`/`_PASSWORD` is
+**refused**, with both named and where each came from; keep one. A `_TOKEN` line that is present and empty
+is refused too; it never falls back to the password.
+
 ⚠️ If you write the dash (`ABCLI_CLUSTER_SEALED-CLUSTER_URL`), the shell would not export it — but
 `.abcli.env` is loaded by `dotenv`, which **does**, under the wrong name. You would see the line and be
 told the URL is missing. The refusal now names the near-miss and the right spelling. There is **no
@@ -526,6 +538,20 @@ can share an HTTP 401 are told apart by Keycloak's `error`, because they send yo
 
 A correct password blamed for a missing client is a developer rotating a credential that worked.
 
+**With a service account** (`_TOKEN`), the grant is `client_credentials` at the credential's own `tokenUrl`,
+the secret in the form body (never the URL, never argv), one access token per command (it lives 300 s and
+there is no refresh). Its refusals are told apart the same way:
+
+| | means | do |
+|---|---|---|
+| `invalid_client` | the secret is wrong, or the account was **rotated**, disabled, expired or deleted | ask for a new credential: a rotation stops the old value at once |
+| `unauthorized_client` | that client may not use `client_credentials`, so it is not a service account | this is not a value the console issues for an agent |
+| HTTP 404 | the `tokenUrl` inside the value does not exist | ask for a new value; it is not yours to edit |
+
+The receipt says who acted: ``autenticado em `<cluster>` como `iter-svc-<name>` (conta de servico) ✓``. That
+same name is what the platform records for the delivery. A `403` after authenticating is the route's own
+sentence: the account lacks `cluster.app.devload`, or it is not an operator in the dev-gate allowlist.
+
 ### What you are told after sending
 
 | the route | the edge | `devload` says | exit |
@@ -548,7 +574,9 @@ clean** — a devload is uncommitted work by nature, and sending `HEAD` for a pa
 
 The dev authenticates with a **Keycloak username and password** of the target cluster, kept in the
 private `.abcli.env`. A user in cluster A's realm does not exist in cluster B's — the refusal is the
-absence, so there is no shared-credential mode to get wrong.
+absence, so there is no shared-credential mode to get wrong. An agent uses its own **service account**
+instead (`ABCLI_CLUSTER_<SLUG>_TOKEN`, above): one value, the account's roles decide what it may do, and
+the platform records the act under its name.
 
 ⚠️ **abcli refuses to run when a credential key lives in a file git would commit.** Not because the
 file sits inside a repository — it almost always does, and it also carries innocent config people
@@ -575,8 +603,13 @@ separate role for it (`cluster.platform.update`). It reads its own keys and neve
 |---|---|---|
 | `devload` | `ABCLI_CLUSTER_<SLUG>_USER` / `_PASSWORD` | deliver one app, bounded by the dev-gate allowlist |
 | `platform-update` | `ABCLI_CLUSTER_<SLUG>_ADMIN_USER` / `_ADMIN_PASSWORD` | replace the cluster's platform sources |
+| either, as a service account | `ABCLI_CLUSTER_<SLUG>_TOKEN` (one value) | what the ACCOUNT's roles allow: `cluster.app.devload`, `cluster.platform.update` |
 
 Both read the same `ABCLI_CLUSTER_<SLUG>_URL`: one cluster has one address.
+
+With a service account the separation moves from keys to **roles on the account**. A `_TOKEN` beside the
+verb's own pair is refused (see `devload`); a `403` from this route names the account and the
+`cluster.platform.update` role it lacks, which the tenant admin grants.
 
 ⚠️ **It never says «updated», because the route cannot promise it.** The platform composes its
 `PYTHONPATH` from the source volume **at container boot**, and the process answering your request is the
@@ -723,8 +756,8 @@ The newline rule is the same as `--stdin`'s (below). A pointer that leads nowher
 
 | verb | what it asks the vault for |
 |---|---|
-| `devload --cluster X` | `ABCLI_CLUSTER_X_USER`, `ABCLI_CLUSTER_X_PASSWORD` — never for `--pack-only`, which sends nothing |
-| `platform-update --cluster X` | `ABCLI_CLUSTER_X_ADMIN_USER`, `ABCLI_CLUSTER_X_ADMIN_PASSWORD` |
+| `devload --cluster X` | `ABCLI_CLUSTER_X_TOKEN`, or `ABCLI_CLUSTER_X_USER` + `ABCLI_CLUSTER_X_PASSWORD` — never for `--pack-only`, which sends nothing |
+| `platform-update --cluster X` | `ABCLI_CLUSTER_X_TOKEN`, or `ABCLI_CLUSTER_X_ADMIN_USER` + `ABCLI_CLUSTER_X_ADMIN_PASSWORD` |
 | `px *` | `PX_KEY` (or `INTERNAL_SERVICE_KEY`), and `CF_ACCESS_CLIENT_SECRET` if the vault is open anyway |
 | `backlog *` | `COORD_API_TOKEN`, and `CF_ACCESS_CLIENT_SECRET` likewise |
 | inference (`docs gen`, `new`, …) | the provider's key — and a locked vault falls back to the local CLI, never a crash |
@@ -850,7 +883,7 @@ abcli px send --to vero "…"        # open a thread            (born `over`)
 abcli px get <msg-id>              # read ONE message         (marks it read)
 abcli px reply <msg-id> "…"        # answer in the thread     (born `over`)
 abcli px out <msg-id> "…"          # câmbio, desligo — closes the thread
-abcli px listen --last 20          # the open frequency
+abcli px channel --last 20         # the open frequency
 abcli px who [--expertise rls]     # profiles — who to address
 ```
 
@@ -921,12 +954,20 @@ agents share a shell and a `~/.claude`, so a global would resolve to a SHARED na
 agent's mailbox — worse than reporting none. A swap is always announced (`identidade TROCADA: a → b`); it
 once happened silently and surfaced three commands later as a 422 from the radio.
 
-### ⚠️ The Stop hook is RETIRED — `px hook install` refuses
+### ⚠️ The Stop hook is RETIRED — its generator is gone, `px hook uninstall` stays
 
 `abcli` no longer generates it (Principal's decision, 2026-09-19). The vigil is a **monitor**, per session,
 armed by the `/wop` skill; the identity, which was the useful half of the old install, is the verb above.
 
-**Why a refusal and not a quiet no-op:** the hook it wrote was **user-level**. One invocation changed the
+**Since 2026-09-30 the generator is gone** (committee-radio design, R0): `px hook install` does not exist, and
+`px listen` / `px claim` are hidden **tombstones** — an old hook that still calls them is answered with an empty
+stdout, one stderr line pointing at the cure, and exit **1** for `listen` (a Stop hook exiting 1 is shown in the
+pane as a non-blocking error — measured on Claude Code 2.1.286 — where exit 0 is never seen and exit 2 would
+BLOCK the stop) or **0** for `claim`. Each firing is counted, one entry per hook, in
+`${XDG_STATE_HOME:-~/.local/state}/abcli/px-tombstones.json`, and `px hook uninstall` reads it back: the cure
+retires when no old hook fires anywhere.
+
+**Why it refused before it was removed, and not a quiet no-op:** the hook it wrote was **user-level**. One invocation changed the
 behaviour of everything running on that box — the other agents included, none of them told. A silent no-op
 would leave whoever ran it believing their watch was armed.
 
@@ -934,13 +975,15 @@ would leave whoever ran it believing their watch was armed.
 abcli px hook uninstall --user   # a box that still carries the old hook cleans it here
 ```
 
-⚠️ **`--user`, never `--local`.** Measured on two independent boxes: the worktree's `settings.local.json`
-was written **correctly** and the session **never read it** — what ran was the user-level hook. The right
-file on disk is not the same thing as the right hook in execution. It holds for removing exactly as it held
-for installing.
+⚠️ To **install**, `--local` was inert (measured on two boxes: written correctly, never read). To **remove**, use
+the scope where the hook IS: `--user` for `~/.claude/settings.json`, `--local`/`--project --repo-root <dir>` for a
+worktree's file. A hook can sit in a local file that never fired and still carry the fallback key on disk — the one
+real specimen found (2026-09-30) lived in a `settings.local.json`, and only `--local` removed it.
 
 The rest of this section describes what that hook **does where it is still installed**, because uninstalling
-it is a deliberate act and until then it keeps running:
+it is a deliberate act and until then it keeps running. ⚠️ Since 2026-09-30 that is true only of the **script**
+shape (`python3 …/px-hook.py nudge|claim` — it talks to the radio directly); the **verb** shape (`abcli px
+listen|claim` in the command) now calls the tombstones above, which do nothing but say so:
 
 - **SessionStart → `px claim`** — each session, at start, claims the listen (`PUT /agents/<you>/session`).
   Last to claim wins; the others do not die, they go quiet (the `attach -d` model). Same in both modes.
@@ -1011,11 +1054,11 @@ from a shared env var or `~/.claude`, so a name is never one agent's leaked onto
 never resolve on someone else's checkout. No file, no identity → silence (**fail closed**): abcli reports the
 wrong agent's inbox to no one. If `install` cannot record the identity it says so **loudly** — it never
 claims success over hooks that would be mute. This works because each agent lives in its own worktree; two
-different names sharing one worktree is the one case it cannot separate. `install` appends to both hook arrays
-and preserves every hook already there (the platform's `claude-persist` among them); idempotent, clean
+different names sharing one worktree is the one case it cannot separate. the install appended to both hook arrays
+and preserved every hook already there (the platform's `claude-persist` among them); idempotent, clean
 `uninstall`.
 
-You do not run `abcli px listen` or `abcli px claim` by hand — the hooks run them.
+`abcli px listen` and `abcli px claim` are tombstones since 2026-09-30 — nothing runs them on purpose.
 
 ---
 
