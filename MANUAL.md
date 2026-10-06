@@ -709,7 +709,7 @@ vault** — there is no recovery, by design. `rekey` changes it; the old one sto
 when a vault does not open with an `ABCLI_SECRETS_KEY` that ENDS in a newline, the refusal says so — before its
 "or the file was altered", which the cipher has to say and which is the expensive thing to believe.
 
-**What goes in.** Names ending in `_PASSWORD`, `_USER`, `_TOKEN`, `_SECRET` or `_KEY` — the same list the at-rest
+**What goes in.** Names ending in `_PASSWORD`, `_USER`, `_TOKEN`, `_SECRET`, `_KEY` or `_CREDENTIAL` — the same list the at-rest
 guard uses. A cluster's `_USER` travels with its `_PASSWORD`: half a credential in a committed file is half the way.
 Anything else is configuration and is refused here: it belongs in `.abcli.env`, where people can read it.
 
@@ -718,7 +718,7 @@ the exit code and never printing a value, abcli names three things the standard 
 
 | found | what to do |
 |---|---|
-| a secret in `.abcli.env` (a name ending in `_PASSWORD`, `_USER`, `_TOKEN`, `_SECRET`, `_KEY`, with a value) | `abcli secret import .abcli.env`, then delete those lines |
+| a secret in `.abcli.env` (a name ending in `_PASSWORD`, `_USER`, `_TOKEN`, `_SECRET`, `_KEY`, `_CREDENTIAL`, with a value) | `abcli secret import .abcli.env`, then delete those lines |
 | `publish` taking a key from the app's `.env` | move the line to `.abcli.env` — the `.env` is the app's |
 | a `.abcli.env` beside the installed abcli | move its keys to your repo's `.abcli.env`, then delete it |
 
