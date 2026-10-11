@@ -758,7 +758,7 @@ The newline rule is the same as `--stdin`'s (below). A pointer that leads nowher
 |---|---|
 | `devload --cluster X` | `ABCLI_CLUSTER_X_TOKEN`, or `ABCLI_CLUSTER_X_USER` + `ABCLI_CLUSTER_X_PASSWORD` — never for `--pack-only`, which sends nothing |
 | `platform-update --cluster X` | `ABCLI_CLUSTER_X_TOKEN`, or `ABCLI_CLUSTER_X_ADMIN_USER` + `ABCLI_CLUSTER_X_ADMIN_PASSWORD` |
-| `px *` | `PX_KEY` (or `INTERNAL_SERVICE_KEY`), and `CF_ACCESS_CLIENT_SECRET` if the vault is open anyway |
+| `px *` | `PX_CREDENTIAL` first, else `PX_KEY` (or `INTERNAL_SERVICE_KEY`); and `CF_ACCESS_CLIENT_SECRET` if the vault is open anyway |
 | `backlog *` | `COORD_API_TOKEN`, and `CF_ACCESS_CLIENT_SECRET` likewise |
 | inference (`docs gen`, `new`, …) | the provider's key — and a locked vault falls back to the local CLI, never a crash |
 
@@ -927,8 +927,17 @@ never prints the key's value, only which variable supplied it.
 
 | var | meaning |
 |---|---|
-| `PX_BASE` | the API root, e.g. `http://localhost:8090/api/px/internal` |
-| `PX_KEY` | the service key (or `INTERNAL_SERVICE_KEY`) |
+| `PX_BASE` | the API root, e.g. `http://localhost:8090/api/px/internal` — configuration, not a secret |
+| `PX_CREDENTIAL` | a member's OWN service-account value (`omni-sa1.…`): the radio reads who is speaking from its token, and `PX_KEY` is then not sent. Its token URL must be on `PX_BASE`'s own host, or nothing is sent — so it goes in only once the radio runs on that host |
+| `PX_CREDENTIAL_FILE` | a path to a file holding that value instead; it must be `600`/`400` |
+| `PX_KEY` | the shared service key (or `INTERNAL_SERVICE_KEY`) |
+
+**The secrets can live in abcli's vault, and a station needs nothing but the vault's key.** `abcli px` asks the
+vault for `PX_CREDENTIAL`, else `PX_KEY`, whenever the real environment lacks them. With `ABCLI_SECRETS_KEY` in
+the environment — a station, a CI, anything without a terminal — the vault opens without asking and only those
+names are injected into the process; `px monitor` (the `/wop` watch) takes the same path. Measured on 0.5.91 with
+a fake key held only in the vault: the radio received it and answered `401 invalid X-Service-Key`. Without
+`ABCLI_SECRETS_KEY` and with no terminal, the refusal says the vault is there and there is no key to open it.
 
 **From outside the box** (an external agent, e.g. behind Cloudflare Access) the radio is reached over the
 tunnel, which puts an Access wall in front of the whole domain. Add the service-token pair and abcli sends
@@ -1240,6 +1249,39 @@ whole thing clean.
 Not the worst verdict anywhere in the set. A fixture asserts ONE defect; if the set happens to be
 incomplete elsewhere, that must show up as *collateral*, reported separately — never as the fixture's
 verdict. Red for the wrong reason and green for the wrong reason are the same bug.
+
+## `abcli mould` — an app's mould through OmniCast, run as you
+
+An external app's backend is **poured from its mould** (`metadata/`). The Principal decided it on 2026-10-08,
+which is also why `abcli new entity` refuses in an app. The developer uses OmniCast as an insider, **always
+through these verbs and never through its endpoints**. Behind them is the box's omnicast service (@cerebelo's):
+`http://omnicast:8090` on the compose network, no auth, never published.
+
+```bash
+abcli mould lint             # is the mould well-formed?              reads only
+abcli mould derive           # metadata/derived/ from the mould       writes
+abcli mould pour             # the generated backend and frontend     writes
+abcli mould check            # OmniCast's check of the app            reads only
+abcli mould pour --dry-run   # ask, and list what would change — touch nothing
+```
+
+**The transport is by content, and that is why the verb writes.** The service runs as one uid and your
+repo belongs to yours. A service that wrote into your checkout would fail, or leave files owned by
+somebody else. So the verb sends the app's files (tracked, and untracked-not-ignored: a mould file you
+have not `git add`-ed yet is still your mould). The service answers with the changes, and the verb applies
+them **as you**.
+
+- **`derive` and `pour` refuse a dirty tree.** Commit first: then their writes cannot mix with yours, and
+  `git diff` shows exactly what they did.
+- **All or nothing.** Every path in the answer is checked before any is touched. If one is absolute, has
+  `..`, lands in `.git/`, or resolves outside the app through a link, nothing is written.
+- **Text only.** A file that is not utf-8, or carries a NUL, is not sent, and the output says which.
+- **The service** is `OMNICAST_URL` (environment, or the app's `.abcli.env`), by default
+  `http://omnicast:8090`.
+
+**Exit codes:** `0` passed · `1` the mould was refused · `2` an invalid request, or a dirty tree · `3` **could
+not ask**. A `3` covers no answer, a timeout, a `5xx`, or an answer that is not JSON. It **never** means
+your mould is wrong, and the message says so.
 
 ## Your 1x1 with the principal — and why it is NOT an abcli verb
 
