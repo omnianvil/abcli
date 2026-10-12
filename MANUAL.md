@@ -249,6 +249,27 @@ nada não dispensa nada, e dá a impressão de que alguém decidiu. (Caso do @pa
 
 ---
 
+### ADR-012 — the structure of a job task (`adr-012-task-structure`)
+
+`abcli check` also reads every function decorated with the worker SDK's `task` (`from omnianvil.core.jobs import
+task`, or `<alias>.task` of `omnianvil.core.jobs` imported `as` something), in production code — not under
+`tests/`, not `test_*.py`, not `conftest.py`. It is the same population as the platform's CI check, so the two
+never disagree on what is a task. It reads the task's own body, by AST, and six rules apply:
+
+```
+T1  database writes only through T (async with ctx.transaction() as T) — no second connection or session
+T2  no commit(), rollback() or close() in the task
+T3  ctx.after_commit(fn) before the transaction opens, never inside it or after it
+T4  no HTTP client unless the decorator declares external_effects="…"
+T5  no clock value unless it declares clock_columns=; random is always flagged (a new uuid7/uuid4 id is fine)
+T6  the task type's name — the decorator's first argument — is a string literal
+```
+
+A finding names the rule, the file, the line and the call it saw. A reasoned waiver on the flagged line exempts
+that rule there — `# abcli: waive T4 — the client retries with ctx.idempotency_key` — and a waiver without a
+reason is itself a finding. A waiver never exempts the task from `assert_idempotent`. With no task in the tree,
+the check says `0 task types in production code — nothing judged`, which is not a pass.
+
 ## `abcli ci` — run YOUR CI, here, before you push
 
 ```bash
