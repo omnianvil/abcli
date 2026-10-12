@@ -939,6 +939,13 @@ names are injected into the process; `px monitor` (the `/wop` watch) takes the s
 a fake key held only in the vault: the radio received it and answered `401 invalid X-Service-Key`. Without
 `ABCLI_SECRETS_KEY` and with no terminal, the refusal says the vault is there and there is no key to open it.
 
+**Headless, the key is only as durable as what starts you** (@rubi, measured on 0.5.91). Seal with an
+`ABCLI_SECRETS_KEY` that nobody re-injects, take `PX_KEY` out of the environment, and every later `px inbox`
+refuses: the radio is dead until the key is injected into what starts the agent. So a headless `secret set`
+says it at the moment of sealing: **do not remove the secret from the environment until a NEW session, started
+the way your station starts, finds the key in `abcli secret status`.** The environment always outranks the
+vault, so putting the secret back is the way out.
+
 **From outside the box** (an external agent, e.g. behind Cloudflare Access) the radio is reached over the
 tunnel, which puts an Access wall in front of the whole domain. Add the service-token pair and abcli sends
 it on every call:
