@@ -168,6 +168,13 @@ satisfy the proxy **without** the intent — `adr-031` matches an import line, s
 a dead import the way past. **You publish the dish, not the recipe.** The waiver comment stays public,
 though: a declared exception lands in a diff where a reviewer sees it, and an evasion never does.
 
+### O veredicto diz que abcli o produziu
+
+Antes do veredicto, o `check` (e o `--staged`) diz a versão do binário que correu e o pin do `.abcli.lock`, e
+**avisa quando diferem**: um `.abcli/bin/abcli` velho ao lado de um pin novo dá o veredicto de outra versão.
+O CI corre sempre o pin, verificado por sha256; à mão, corre o binário pinado (`abcli pin fetch`). O `--format
+json` leva `abcli_version` e `pinned_version`.
+
 ### `--format json` — o veredicto inteiro, para agentes e CI
 
 ```json
@@ -204,7 +211,11 @@ monorepo, e duas das dez regras não têm sujeito lá por desenho.
 }
 ```
 
-- **Sem `reason` ou sem `owner`, a entrada é ignorada.** É o `# noqa` que recusamos: sem dono não há revisão.
+- **Sem `reason` ou sem `owner`, a entrada não se aplica — e o portão nomeia-a.** É o `# noqa` que recusamos: sem
+  dono não há revisão. O ficheiro aceita comentários (JSONC); um ficheiro ilegível é dito, e conta como «não
+  avaliado» (`3`), nunca como vazio em silêncio.
+- **`regra::<glob>` dispensa um GLOB sem ficheiros, nunca um ficheiro.** Para dispensar uma violação NUM
+  ficheiro, o marcador vai nesse ficheiro, com a razão (`abcli explain <regra>` diz qual).
 - **Aparece em TODAS as corridas**, nunca atrás de uma flag — uma dispensa que ninguém vê é a deriva que ela
   foi declarada para impedir.
 - ⚠️ **E é FALSIFICÁVEL**: no dia em que um ficheiro casar o glob da regra dispensada, o portão fica
@@ -269,6 +280,24 @@ A finding names the rule, the file, the line and the call it saw. A reasoned wai
 that rule there — `# abcli: waive T4 — the client retries with ctx.idempotency_key` — and a waiver without a
 reason is itself a finding. A waiver never exempts the task from `assert_idempotent`. With no task in the tree,
 the check says `0 task types in production code — nothing judged`, which is not a pass.
+
+### The platform's permission rules, vendored as data (`permission-keys`, `manifest-permission-prefix`)
+
+Two rules `abcli check` runs over an app's `frontend/public/manifest.json` and `backend/declaration.json`, read
+from the platform's `contracts/rules/` (copied, under a gate that turns red when the platform changes them —
+never retyped here):
+
+```
+permission-keys             no `tenant.` key with `*` in its SECOND segment: one held pattern would reach
+                            every app on the tenant
+manifest-permission-prefix  every gate in menu[].permissions[], requiredRoles[] and roleDefinitions[].key is
+                            a tier role tenant.<app>.<tier>, or starts with the declaration's
+                            keycloak.profile_prefix and '.' — exactly, case-sensitive (oracle_hcm. is not
+                            oracle-hcm.); with no prefix declared, every non-tier gate fails
+```
+
+`new app` writes both files in the shape both rules accept. On the platform tree neither judges: the first has
+the platform's own lint, and the second is about one app.
 
 ## `abcli ci` — run YOUR CI, here, before you push
 
