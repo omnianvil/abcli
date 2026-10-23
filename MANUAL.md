@@ -1340,6 +1340,63 @@ them **as you**.
 not ask**. A `3` covers no answer, a timeout, a `5xx`, or an answer that is not JSON. It **never** means
 your mould is wrong, and the message says so.
 
+## `abcli guide` — the platform's guides for external developers, carried in the binary
+
+```bash
+abcli guide              # the guides this abcli carries
+abcli guide jobs         # background jobs for a guest app: declare, run, enqueue, read progress
+abcli guide jobs > jobs.md
+```
+
+An external developer never sees the platform's repository, and this manual does not travel with the binary. So the
+guides the platform writes for them are vendored INTO the binary, byte for byte (`scripts/vendor-guides.py`, with the
+origin's commit and sha256), and printed from there. The guide goes to stdout as Markdown, and where it came from
+goes to stderr. The platform fingerprints the source in `scripts/ci/abcli-vendored.json`, and abcli's own test turns
+red when the copy is edited or the origin moves.
+
+## `abcli skills` — the skills this abcli carries, deposited with a stamp
+
+```bash
+abcli skills list                         # what this abcli carries
+abcli skills install wop                  # deposit it under ./.claude/skills/wop/, stamped
+abcli skills check [--user]               # judge every deposited copy; exit 1 on any that is not current
+```
+
+A skill is a file an agent reads, and upgrading the binary does not rewrite it. So `install` writes a stamp after
+the front matter: the skill's name, the sha256 of its text, and the abcli that wrote it. `check` names each copy:
+- **current:** the text this abcli carries, stamped or not;
+- **stale:** untouched since an abcli deposited a text this one no longer carries, naming that abcli. A copy
+  deposited by a newer abcli says so: do not reinstall it with this one;
+- **edited:** it no longer matches its own stamp;
+- **unstamped:** not deposited by `skills install` (or deposited before stamps), and different.
+
+Current is judged by content, so a release that does not change a skill rewrites no file, and a repo that tracks
+its copy sees no churn. `pin install` refreshes an adopted, untracked copy, and names a tracked one, which goes by
+PR. `abcli doctor` prints a skills section only when a copy is not current. `abcli px wop` is
+`abcli skills install wop`, with the watch's receipt.
+
+## `abcli work` — plans and tasks, for committee members
+
+```bash
+abcli work guide                 # the reference: documents, acts, who may do what
+abcli work status                # your credential's square
+abcli work plan list             # noun first: work plan submit, work task claim, …
+```
+
+The verbs, the client and the guide are the `committee-work` package (@efesto), carried as a stamped copy
+(`agents/committee-work.copy.json`) like the radio's. abcli builds each call's context:
+- **the base:** the radio's server, `PX_BASE` cut before `/px`;
+- **the bearer:** the member's own `PX_CREDENTIAL` (an `omni-sa1.` service account from this tool's vault),
+  exchanged by the radio's own exchange, origin-checked and cached;
+- **the repository root, and abcli's name.**
+
+Exit codes: 0 done, 1 refused (the server's words), 2 usage, 3 not configured (said which piece), 4 unreadable.
+
+The same package serves an agent as MCP tools, `abcli serve --toolset work`, and carries two skills:
+`abcli skills install work-planning` (building a plan) and `abcli skills install work-operating` (running and
+concluding one). They are vendored from the package's export by `scripts/vendor-work-skills.py`, which checks the
+export's stamp before it writes anything.
+
 ## Your 1x1 with the principal — and why it is NOT an abcli verb
 
 There is a durable channel of commitments between the principal and **one named agent** — you. PX dies
