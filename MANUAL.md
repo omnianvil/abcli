@@ -486,6 +486,13 @@ block into the package's `omni.config.json` **verbatim**. That is how the cluste
 the app-runtime supervisor and the installer all resolve `delivery` against the package root. There is
 one description of where things are, and it is yours.
 
+`abcli new app` writes this block for an app with a backend, and a `backend/requirements.txt` beside it.
+That file holds the backend's third-party dependencies from `pyproject.toml`, **without `omnianvil-core`**
+(the app-runtime provides it) and as **ranges, not pins**: the supervisor installs it constrained by the
+runtime's own set, so each package the runtime carries resolves to the runtime's version. Keep the two
+lists in step when you add a dependency. A frontend-only app gets no block, because a delivery carries a
+backend.
+
 ```
 frontend      the BUILT bundle — your machine builds it, the cluster does not
 backend       SOURCE (.py), never a wheel
@@ -577,6 +584,18 @@ cluster's package index is the real gate at install time), but it never stays qu
 | differs | warns, continues — if install fails to resolve, start looking here |
 | cluster declares none | warns that it **could not compare**, continues — normal where no installer provisioned |
 
+**Core floor** — your backend's `pyproject.toml` (`[project].dependencies`, at `delivery.backend`) declares
+`omnianvil-core>=X`; the public environment's `app_runtime.core` says which core the cluster's guests import. This is
+the rule of the supervisor's `core` step, read **before** packing, so a release below the floor never leaves your
+machine. An unknown is never a refusal: the supervisor still checks it at delivery.
+
+| | |
+|---|---|
+| meets the floor | says it: `core: omnianvil-core <v> cumpre o piso …` |
+| below the floor | **refuses before packing**, naming both versions |
+| the cluster does not name its core (`core_state` not `reported` or `stamp`, or an older platform) | a note (ⓘ), continues |
+| your backend declares no floor | silent |
+
 **Authenticate** — Keycloak password grant against the `iter-devload` client. The three refusals that
 can share an HTTP 401 are told apart by Keycloak's `error`, because they send you to different places:
 
@@ -601,6 +620,21 @@ there is no refresh). Its refusals are told apart the same way:
 The receipt says who acted: ``autenticado em `<cluster>` como `iter-svc-<name>` (conta de servico) ✓``. That
 same name is what the platform records for the delivery. A `403` after authenticating is the route's own
 sentence: the account lacks `cluster.app.devload`, or it is not an operator in the dev-gate allowlist.
+
+**Requirements pins** — after authenticating and before sending, `devload` reads the constraints the cluster's
+guests apply (`GET /api/cluster/app-runtime/constraints`, which asks for `cluster.app.devload`). The supervisor
+installs your `requirements.txt` with `-c` over that set, so a requirement the runtime's version does not satisfy
+is refused there as unsatisfiable, and nothing is installed. `devload` refuses the same case first. It is the only
+case it refuses:
+
+| | |
+|---|---|
+| every requirement the runtime carries is satisfied | says how many were compared, with the image tag |
+| a requirement the runtime's version does not satisfy | **refuses before sending**, naming your requirement and the runtime's version |
+| a package the runtime does not carry | not compared: uv is free to resolve it |
+| a constraint with a marker, or a name on two lines | left out and counted: it has no one version from here |
+| the route refuses (401, 403), is absent (404, an older platform), or no guest has reported (503) | a note (ⓘ), continues |
+| the guests disagree (`mixed`), each one named; the text does not match its sha256; the digest is not the public environment's | a note (ⓘ), continues |
 
 ### What you are told after sending
 
@@ -674,6 +708,10 @@ the back half waits for a bounce.
 | `0` | the sources are at the ref and every requested build finished |
 | `3` | **I do not know** — the wait ran out and the build is still running inside the `web` container |
 | `1` | refused, or a build failed, or there is no builder to run it |
+
+**The core the volume now carries** is on the receipt (`core: <version>`), from the volume's own
+`scripts/release/core-version.sh`. `core: unknown — <why>` is the cluster saying it could not name it (no
+`omnianvil-core-v*` tag reachable, or a ref older than the script); `core: not said` is an answer without the field.
 
 ⚠️ **Running out of `--build-timeout` is not a failure.** Printing "failed" there would have operators
 re-launching a compilation that is already going. The verb says where to read the real outcome instead.
@@ -978,7 +1016,7 @@ never prints the key's value, only which variable supplied it.
 | var | meaning |
 |---|---|
 | `PX_BASE` | the API root, e.g. `http://localhost:8090/api/px/internal` — configuration, not a secret |
-| `PX_CREDENTIAL` | a member's OWN service-account value (`omni-sa1.…`): the radio reads who is speaking from its token, and `PX_KEY` is then not sent. Its token URL must be on `PX_BASE`'s own host, or nothing is sent — so it goes in only once the radio runs on that host |
+| `PX_CREDENTIAL` | a member's OWN service-account value (`abcon-sa1.…`, or an older `omni-sa1.…`): the radio reads who is speaking from its token, and `PX_KEY` is then not sent. Its token URL must be on `PX_BASE`'s own host, or nothing is sent — so it goes in only once the radio runs on that host |
 | `PX_CREDENTIAL_FILE` | a path to a file holding that value instead; it must be `600`/`400` |
 | `PX_KEY` | the shared service key (or `INTERNAL_SERVICE_KEY`) |
 
@@ -1386,7 +1424,7 @@ abcli work plan list             # noun first: work plan submit, work task claim
 The verbs, the client and the guide are the `committee-work` package (@efesto), carried as a stamped copy
 (`agents/committee-work.copy.json`) like the radio's. abcli builds each call's context:
 - **the base:** the radio's server, `PX_BASE` cut before `/px`;
-- **the bearer:** the member's own `PX_CREDENTIAL` (an `omni-sa1.` service account from this tool's vault),
+- **the bearer:** the member's own `PX_CREDENTIAL` (an `abcon-sa1.` service account, or an older `omni-sa1.` one, from this tool's vault),
   exchanged by the radio's own exchange, origin-checked and cached;
 - **the repository root, and abcli's name.**
 
