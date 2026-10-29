@@ -596,6 +596,12 @@ machine. An unknown is never a refusal: the supervisor still checks it at delive
 | the cluster does not name its core (`core_state` not `reported` or `stamp`, or an older platform) | a note (ⓘ), continues |
 | your backend declares no floor | silent |
 
+A low floor never refuses, and nothing keeps a floor current (@rubi). So `devload` also reads the core your
+backend's `uv.lock` resolved, the one the app was built and tested against. When that core is **newer** than the
+one the cluster's guests import, it prints a note (ⓘ) naming both, never a refusal. Only a built artifact's version
+counts (a registry, the `sdk/` find-links, a URL, a wheel), never a tree's (`editable`, `directory`, `git`), and only
+when the cluster names its core, as above.
+
 **Authenticate** — Keycloak password grant against the `iter-devload` client. The three refusals that
 can share an HTTP 401 are told apart by Keycloak's `error`, because they send you to different places:
 
