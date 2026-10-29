@@ -30,7 +30,7 @@ That is the *global* install — enough to bootstrap. **What actually governs a 
 
 ```bash
 abcli pin                      # what does THIS repo pin?  (and is it behind?)
-abcli pin --latest             # pin the newest release   (writes .abcli.lock)
+abcli pin --latest             # pin the newest release   (writes .abcli.lock, and points .abcli/bin/abcli at it)
 abcli pin --version 0.5.7      # pin an exact version
 abcli pin install              # materialize the pinned binary for this arch
 abcli pin lag [--json]         # is this repo behind the latest release?
