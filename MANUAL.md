@@ -586,13 +586,17 @@ cluster's package index is the real gate at install time), but it never stays qu
 
 **Core floor** — your backend's `pyproject.toml` (`[project].dependencies`, at `delivery.backend`) declares
 `omnianvil-core>=X`; the public environment's `app_runtime.core` says which core the cluster's guests import. This is
-the rule of the supervisor's `core` step, read **before** packing, so a release below the floor never leaves your
-machine. An unknown is never a refusal: the supervisor still checks it at delivery.
+the rule of the supervisor's `core` step, read **before** packing. When the cluster gives `app_runtime.core_stamp`
+(platform#2016), the volume's own `CORE_VERSION`, the floor is compared with it: it is what a new release imports. So a
+release below the volume's core never leaves
+your machine. An unknown is never a refusal, and neither is the running guests' core: the supervisor still checks it at
+delivery.
 
 | | |
 |---|---|
 | meets the floor | says it: `core: omnianvil-core <v> cumpre o piso …` |
-| below the floor | **refuses before packing**, naming both versions |
+| below the floor, against the volume's own stamp (`core_stamp`, or `core_state` `stamp`) | **refuses before packing**, naming both versions |
+| below the floor, against the running guests' core (`core_state` `reported`, and no `core_stamp`) | **warns, and delivers**: a guest reports the core it imported when it started, and a `platform-update` moves the volume under it, so a new release may import a newer one. The supervisor decides |
 | the cluster does not name its core (`core_state` not `reported` or `stamp`, or an older platform) | a note (ⓘ), continues |
 | your backend declares no floor | silent |
 
