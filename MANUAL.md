@@ -356,6 +356,7 @@ abcli design-app                    # free text → an app + backend spec
 abcli scaffold-app                  # scaffold from an AppSpec JSON
 abcli gen-api                       # typed openapi-fetch client wiring for an MFE
 abcli gen-api --populate            # schema.gen.ts from the backend's OpenAPI, every format: uuid as a branded UUID
+abcli bip build|check --root bip    # BI Publisher pairs from declared reports (OmniCast's BIP addon, offline)
 abcli docs scaffold                 # docs/<persona>/<type>/ — tutorials, how-tos, reference, explanation
 ```
 
