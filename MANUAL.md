@@ -687,7 +687,15 @@ abcli platform-update --cluster omni                          # sources to `main
 abcli platform-update --cluster omni --ref 7fd908c            # pin a sha (see the first-clone note)
 abcli platform-update --cluster omni --build ui,core-auth     # build exactly those two packages
 abcli platform-update --cluster omni --build none             # fetch only, build nothing
+abcli platform-update --cluster omni --accept-breaking app-a  # update even though it breaks app-a, by name
 ```
+
+⚠️ **An update that would break an installed app is refused, and nothing is applied** (the compatibility gate,
+platform#2125). The cluster compares each installed app's recorded `requires.features` with the catalogue the
+update brings, before the front moves. The refusal names each app with its sentence, says how to proceed, and
+names the flag: `--accept-breaking a,b` accepts those apps by NAME, never a blanket yes. On success the receipt
+lists every app that is not compatible and counts the rest; `not checked` (the cluster could not compare) never
+blocks.
 
 ⚠️ **This is not `devload`, and the credential is the difference.** `devload` delivers **one guest app**
 with the app publisher's keys. This verb changes **what the whole cluster runs**, so the platform opened a
@@ -1440,10 +1448,40 @@ The verbs, the client and the guide are the `committee-work` package (@efesto), 
 
 Exit codes: 0 done, 1 refused (the server's words), 2 usage, 3 not configured (said which piece), 4 unreadable.
 
-The same package serves an agent as MCP tools, `abcli serve --toolset work`, and carries two skills:
-`abcli skills install work-planning` (building a plan) and `abcli skills install work-operating` (running and
-concluding one). They are vendored from the package's export by `scripts/vendor-work-skills.py`, which checks the
-export's stamp before it writes anything.
+The same package serves an agent as MCP tools, `abcli serve --toolset work`, and carries three skills:
+`abcli skills install work-planning` (building a plan), `abcli skills install work-operating` (running and
+concluding one) and `abcli skills install work-new-agent` (an OMEGA's walk, with the Principal, to a running new
+agent, with `abcli work seat add` and `abcli work seat check`). They are vendored from the package's export by
+`scripts/vendor-work-skills.py`, which checks the export's stamp before it writes anything.
+
+## `abcli request`, `abcli action`, `abcli pending`, `abcli report` — the end-of-run report's store
+
+A seat files what its end-of-run report lists into the engine's store, each item under a code the store never
+reissues (`malho-R38`): what it asks of the Principal, what only his hands can do, and its own open items.
+
+```bash
+abcli request file --type version --target "omnianvil/abcli v0.5.110" --title "cut 0.5.110" \
+                   --unblocks malho-O20 --risk "a cold build" --recommendation yes
+abcli request show malho-R38              # as the store holds it
+abcli request withdraw R38 --reason "…"   # a bare code is your own
+abcli request executed R38 --ref v0.5.110 # or `failed`, once the Principal approved it and it ran
+abcli action file --title "accept the npm invitation"
+abcli action drop A1
+abcli pending add --title "plan #55" --blocked-by maratona-O7
+abcli pending done O21                    # or `drop`
+abcli report floor --kind R --floor 37    # once, from your notes, before you file: where your numbering continues
+abcli report                              # your report as the store composes it now: R, O, T, A, each since and aged
+abcli report publish --summary-file r.md  # your Resumo, and the lists from the store as of now — stored, never edited
+```
+
+- **The square is your credential's, and the owner is you**: neither is ever sent by hand.
+- **A target already asked** answers the first filer's code and owner (`already open: nexo-R12, filed by nexo`):
+  cite it under T and do not file it again.
+- **A seat writes only its Resumo.** `abcli report publish` sends the file and nothing else; the store fills R, O, T
+  and A. The engine's reader is the one enforcer: a refusal prints its rule, where, reason and the reader's
+  revision, and exits 1. A seat with no live station is refused: a report is drawn in the conversation it closes.
+- The credential, the base and the exit codes are those of `abcli work`: 0 done, 1 refused (the store's code and
+  sentence), 2 usage, 3 not configured, 4 unreadable. `--json` prints the store's whole answer.
 
 ## Your 1x1 with the principal — and why it is NOT an abcli verb
 
