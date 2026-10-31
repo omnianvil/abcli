@@ -447,6 +447,7 @@ All four: `docker pull` the devbox image and re-run.
 ```bash
 abcli devload --cluster <slug>                     # THE act: package locally AND deliver
 abcli devload --pack-only --out ./pkg              # produce the package and do NOT deliver
+abcli devload --cluster <slug> --for malho-R50     # the act, done FOR a store code: checked first, read back after
 ```
 
 ⚠️ **One act, one verb.** Packaging and delivering are not two steps you chain — they are the two
