@@ -1228,6 +1228,13 @@ in somebody else's red PR. A repair could not travel.
 Now the plan is a versioned artefact: your repo pins one in `.abcli-plan.lock`, a fix lands upstream, and it
 reaches every repo that upgrades. **Do not hand-edit a planned file** — `plan check` refuses, on purpose.
 
+**Except in `.gitignore` and `.dockerignore` (plan v16).** There the plan is the block between the two
+`# >>> abcli delivery plan` / `# <<< abcli delivery plan` lines, and the rest of the file is yours: write your own
+rules below the closing marker, and `plan check` and `plan upgrade` never touch them. Up to v15 the upgrade replaced
+both files whole and dropped a repo's own rules in silence (@rubi measured it in mpem: a folder of customer material
+and `.abcli.env`, staged by the next `git add -A`). The first upgrade of a file with no block keeps, after it, every
+line the plan does not carry, and names each one; `plan upgrade --dry-run` names them before anything is written.
+
 The lock cannot be its own witness: re-blessing a hand-edit inside the lock is reported as a **forged** lock,
 not as integrity, and a plan version this binary never published is reported as **unverifiable** rather than
 intact. A gate with no anchor must refuse, not pass.
@@ -1242,7 +1249,7 @@ abcli template check           # THE GATE — fails closed
 abcli template sync            # write the owned parts; never touches yours
 ```
 
-`plan` owns whole files. This owns what `plan` cannot: files that weld a **mechanical part** (the tool's) to
+`plan` owns whole files (and one block in each ignore file). This owns what `plan` cannot: files that weld a **mechanical part** (the tool's) to
 a **per-app part** (yours) — and it owns them **per key**, never per file.
 
 Today that is `.devcontainer/devcontainer.json` and `AGENTS.md`:
