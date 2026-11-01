@@ -1367,6 +1367,18 @@ verification*.
 islands, referenced by nothing. A verifier that walks down from the views visits 23 of 49 and calls the
 whole thing clean.
 
+### A derived document must be the mould's of today
+
+`metadata/derived/capabilities.json` and `state-machines.json` declare the mould files they were derived from and
+their digest (`sources`, `sourcesSha256`, the ADR-130 recipe). `vix` recomputes the digest from the files' bytes:
+a derived document whose digest no longer matches is `✗ derived-document-is-stale`, and the verb exits 1. That is
+the derived document OmniCast's `check` would refuse as DRIFT, found offline, with no service: an app's CI runner
+cannot reach OmniCast, and this needs nothing but the checkout, so a PR that edits `metadata/` without
+`abcli mould derive` goes red in its own CI. A derived document that declares no sources is `?`, never `✓`.
+
+It is provenance, beside the laws and not among them: no overlay fixture of the corpus can express it, because it
+is read from the files on disk.
+
 ### `--fixtures` judges the rule the fixture NAMES
 
 Not the worst verdict anywhere in the set. A fixture asserts ONE defect; if the set happens to be
@@ -1440,6 +1452,28 @@ Current is judged by content, so a release that does not change a skill rewrites
 its copy sees no churn. `pin install` refreshes an adopted, untracked copy, and names a tracked one, which goes by
 PR. `abcli doctor` prints a skills section only when a copy is not current. `abcli px wop` is
 `abcli skills install wop`, with the watch's receipt.
+
+**Per executor (arges's plan #117, P5).** `--executor codex` deposits and judges the skills where Codex reads a
+repository's skills, `.codex/skills/`, and writes nothing under `.claude/skills/`; `--user` reads `$CODEX_HOME/skills`.
+Measured on codex-cli 0.166.0 with `codex debug prompt-input`: its skill roots are `<workdir>/.codex/skills`,
+`$CODEX_HOME/skills` and `<workdir>/.agents/skills`, never `.claude/skills`, and an abcli-stamped skill is listed.
+Without `--executor` nothing changes (`claude-code`). WOp is refused for Codex, named or told by the worktree's folders
+(a `.codex/` and no `.claude/`): it arms a background monitor, Codex has none, and `codex queue` wakes a Codex seat.
+
+## `abcli mcp register` — the work tools in a Codex home
+
+```bash
+abcli mcp register --executor codex [--codex-home DIR] [--replace] [--dry-run]
+```
+
+It writes `[mcp_servers.work]` into the Codex home's `config.toml` (`--codex-home`, else `$CODEX_HOME`, else
+`~/.codex`): `command` is the `abcli` on PATH (or `--command`), `args` are `serve --toolset work`, and `env_vars`
+NAMES the radio's variables for Codex to forward: `PX_BASE`, `PX_KEY`, `PX_CREDENTIAL`, and the rest. It never writes a
+value. Measured on codex-cli 0.166.0: the home's daemon starts a stdio MCP server with seven environment names, and
+without `env_vars` the work tools see no credential (`work_status` alone). Codex forwards the names from the daemon's
+environment as it started, so a changed credential reaches the tools after the daemon restarts. The rest of
+`config.toml` is kept byte for byte, a second run changes nothing, and a different `[mcp_servers.work]` is refused
+unless `--replace`.
 
 ## `abcli work` — plans and tasks, for committee members
 
