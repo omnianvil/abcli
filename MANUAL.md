@@ -1460,6 +1460,27 @@ Measured on codex-cli 0.166.0 with `codex debug prompt-input`: its skill roots a
 Without `--executor` nothing changes (`claude-code`). WOp is refused for Codex, named or told by the worktree's folders
 (a `.codex/` and no `.claude/`): it arms a background monitor, Codex has none, and `codex queue` wakes a Codex seat.
 
+## `abcli verify-schema --throwaway` — the delivery's schema check, before delivering
+
+```bash
+abcli verify-schema --throwaway [PATH] [--server-url postgresql://user:pass@host:port]
+```
+
+The cluster verifies an app's schema after migrating it, with the app-runtime supervisor's own verifier; a mismatch
+was found there, at delivery time (abcli#78, from platform#1831). This runs the same check first, on a database it
+builds and drops itself:
+
+1. `abcli_verify_<hex>` on the Postgres server the app's poured tests already name (`<APP>_TEST_SERVER_URL`, from the
+   descriptor's `database.url` variable), or `--server-url`; abcli starts no Postgres;
+2. the app's own `alembic upgrade head`, with `<APP>_DATABASE_URL` and `DATABASE_URL` pointed at it;
+3. `python -m omnianvil.core.schema_snapshot verify <versions dir>` from the app's `backend/.venv` — the verifier is
+   never re-implemented, so its verdict is the cluster's: **0** matches, **10** differs, **11** unreadable, **12** not
+   verified; any other code is the verifier failing. **1**: the chain did not migrate;
+4. the database dropped whatever happened, and said if it could not be.
+
+Everything that touches the database runs in the app's environment (`uv sync --extra dev` in the backend first): the
+closed binary carries no Postgres driver. The server's password is never printed.
+
 ## `abcli mcp register` — the work tools in a Codex home
 
 ```bash
