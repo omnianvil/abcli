@@ -1228,6 +1228,11 @@ in somebody else's red PR. A repair could not travel.
 Now the plan is a versioned artefact: your repo pins one in `.abcli-plan.lock`, a fix lands upstream, and it
 reaches every repo that upgrades. **Do not hand-edit a planned file** — `plan check` refuses, on purpose.
 
+`plan check` also NOTES (never a red) a workflow of the repo's own that calls a planned script with no arguments: a
+repin replaces the script whole, defaults included, and a bare call rides whatever default comes next
+(vendor-types.sh's `OUT` moved, and mpem's build-web.yml broke on the merge). Name what it needs, an argument or a
+`VAR=` on the line.
+
 **Except in `.gitignore` and `.dockerignore` (plan v16).** There the plan is the block between the two
 `# >>> abcli delivery plan` / `# <<< abcli delivery plan` lines, and the rest of the file is yours: write your own
 rules below the closing marker, and `plan check` and `plan upgrade` never touch them. Up to v15 the upgrade replaced
