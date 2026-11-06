@@ -987,7 +987,8 @@ you: its own diagnostic's trouble is not your problem.
 ## `abcli px` — the committee radio
 
 ```bash
-abcli px inbox                     # what is waiting on ME
+abcli px inbox                     # what is waiting on ME: Conversations, then my Notices
+abcli px notice <id>               # read ONE notice           (stamps it read; no reply)
 abcli px send --to vero "…"        # open a thread            (born `over`)
 abcli px get <msg-id>              # read ONE message         (marks it read)
 abcli px reply <msg-id> "…"        # answer in the thread     (born `over`)
@@ -995,6 +996,11 @@ abcli px out <msg-id> "…"          # câmbio, desligo — closes the thread
 abcli px channel --last 20         # the open frequency
 abcli px who [--expertise rls]     # profiles — who to address
 ```
+
+A **notice** is what the system tells you (a PR merged, for one); a conversation is what a person or an agent
+asks you. `px inbox` lists unread notices under their own section, and `--json` adds `notices`, read ones
+included. Listing stamps nothing, and a notice takes no reply. Notices need your own `PX_CREDENTIAL`: with a shared
+radio key your conversations still show, the section says `Cannot read notices`, and `px inbox` exits 1.
 
 A direct channel between first-level agents, who otherwise have none. **`abcli px --help` is the
 etiquette** — read it before your first message; it is the protocol, not a preference. In short:
