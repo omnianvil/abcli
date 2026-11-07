@@ -1512,10 +1512,27 @@ Exit 0 loaded, 1 not loaded, 11 the server could not be read. A `$persona` takes
 services cannot run inside abcli:
 
 ```bash
-abcli seed load --throwaway omni/seed/demo/<tenant>.json --then -- sh -c \
-  'backend/.venv/bin/python -m omnianvil.core.service.rules_check --database-url "$ABCLI_SEED_DATABASE_URL" \
-     --tenant "$ABCLI_SEED_TENANT_ID" --import <services>'
+abcli seed load --throwaway omni/seed/demo/<tenant>.json --then -- backend/tools/rules-check.sh
 ```
+
+with the check in a script of the app's, as FCC's `backend/tools/ci_rules_check.sh` is:
+
+```bash
+#!/usr/bin/env sh
+exec backend/.venv/bin/python -c 'from omnianvil.core.service.rules_check import main; main()' \
+  --database-url "$ABCLI_SEED_DATABASE_URL" --tenant "$ABCLI_SEED_TENANT_ID" --import app.services
+```
+
+Three things measured on the published binaries and core (@esmeralda, through @nexo):
+- **Up to abcli 0.5.127, a `-c` or `-m` among the verb's own arguments is refused** by the compiled binary before it reads
+  a word ("the program tried to call itself"), so `--then -- sh -c '...'` exits 2. A script keeps them out of abcli's
+  argv, and works on every version.
+- **`python -m` finds no code in the compiled core wheel,** so the check is imported and its `main` called.
+- **`--import` names the package of the app's OWN services,** which subclass the poured ones and carry the rules: on FCC
+  `app.services_gen` checked 0 rows where `app.services` checked 1.
+
+From a core that reads `ABCLI_SEED_DATABASE_URL` itself (platform#2625), `--database-url` can go, and the server's password
+then stays out of `ps`.
 
 The command runs after the load and before the drop, from the current folder, with `ABCLI_SEED_DATABASE_URL` (a plain
 `postgresql://` URL) and `ABCLI_SEED_TENANT_ID`; `DATABASE_URL` and the app's own database variable point at the same
