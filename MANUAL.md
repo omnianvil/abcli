@@ -1492,6 +1492,22 @@ builds and drops itself:
 Everything that touches the database runs in the app's environment (`uv sync --extra dev` in the backend first): the
 closed binary carries no Postgres driver. The server's password is never printed.
 
+## `abcli seed load --throwaway` — a demo load file, through the cluster's own write path
+
+```bash
+abcli seed load --throwaway omni/seed/demo/<tenant>.json [--server-url postgresql://user:pass@host:port]
+```
+
+For an app's CI: it proves a demo load file loads, with no copy of the writer in the app. The file is read by the cluster's
+own reader, and `abcli_verify_<hex>` is built and migrated as `verify-schema` does, on the same server variable. The
+file is held to that database's catalogue, so an unknown column or a required one left out is refused by name, before
+anything is written. Then the loader's statements run in one transaction, the verb says how many rows each table holds
+after the commit, and the database is dropped whatever happened. A file not named after its tenant is refused, because
+the cluster would never open it.
+
+Exit 0 loaded, 1 not loaded, 11 the server could not be read. A `$persona` takes a stand-in id, stable across runs.
+`users` are ignored, and the verb says so: only the door writes them, on a cluster. It cannot see a service's rules.
+
 ## `abcli mcp register` — the work tools in a Codex home
 
 ```bash
@@ -1617,6 +1633,7 @@ the evidence, and the routing is derived from it. `--evidence` is not a formalit
 and it is what a duplicate search is run against.
 
 Or [open an issue](../../issues/new/choose) and pick a form.
+
 
 ---
 
