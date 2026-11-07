@@ -1508,6 +1508,25 @@ the cluster would never open it.
 Exit 0 loaded, 1 not loaded, 11 the server could not be read. A `$persona` takes a stand-in id, stable across runs.
 `users` are ignored, and the verb says so: only the door writes them, on a cluster. It cannot see a service's rules.
 
+Interrupted by SIGINT, SIGTERM or SIGHUP, the verb still drops the database, and a run it did not finish never exits 0.
+**Only SIGKILL to the whole process group leaves `abcli_verify_<hex>` behind**, because nothing is left to drop it. The
+same goes for `verify-schema`: a CI that cancels a job that way drops that database by its name.
+
+## `abcli seed demo` — ask a cluster for an app's demo data
+
+```bash
+abcli seed demo --cluster <slug> --tenant <slug> [--app <id>] [--check] [--remove] [--for <code>] [--timeout 600]
+```
+
+Demo data is an act: neither an install nor a delivery brings it. The verb asks the cluster to load the file of the app's
+active release, `omni/seed/demo/<tenant>.json`, so nothing is uploaded. The cluster queues the request, its host runs it,
+and the verb follows the request's trail to its end. `--check` reads the file and holds it against the cluster, and
+writes nothing. `--remove` takes the file's rows out.
+
+The credential and the guard against the wrong cluster are `devload`'s. Only the operator, or a service account linked
+to the app, may ask, and a cluster declared `production`, or declaring nothing, refuses. A refusal is printed in the
+route's words. Exit **0** done, **1** refused or failed, **3** I do not know: the wait ran out, and the request goes on.
+
 ## `abcli mcp register` — the work tools in a Codex home
 
 ```bash
