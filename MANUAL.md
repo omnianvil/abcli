@@ -1597,6 +1597,26 @@ concluding one) and `abcli skills install work-new-agent` (an OMEGA's walk, with
 agent, with `abcli work seat add` and `abcli work seat check`). They are vendored from the package's export by
 `scripts/vendor-work-skills.py`, which checks the export's stamp before it writes anything.
 
+## `abcli probe` — the readings of a square's stations
+
+```bash
+abcli probe abconvoy             # every station of the square, each reading with its two clocks
+abcli probe abconvoy --json      # the route's answer as it came, for a script
+```
+
+It asks abconvoy's readings route, `GET /v1/squares/{square}/readings` (DESIGN-station-readings §7), as the member. It uses
+the same base, credential and exchange as `abcli work`, and prints what the route answers, nothing more:
+
+- **per station, its declaration.** A station with none says "no declaration": its own answer, never "no drift";
+- **each reading with two clocks.** `read_at` is the host's clock when its pass read the fact. `received_at` is the
+  database's clock when the fact arrived. The age is taken on the database's clock alone (`as_of - received_at`), never
+  on this machine's;
+- **unknown is said.** A reading the route marks `known: false` prints `unknown`, and why: never reported, or not
+  reported by this host. It is never a blank or a zero.
+
+Who reads what is the route's rule. An OMEGA reads its whole square; any other member reads its own station. A refusal
+prints the route's own words. Exit codes are those of `abcli work`: 0 done, 1 refused, 3 not configured, 4 unreadable.
+
 ## `abcli request`, `abcli action`, `abcli pending`, `abcli report` — the end-of-run report's store
 
 A seat files what its end-of-run report lists into the engine's store, each item under a code the store never
