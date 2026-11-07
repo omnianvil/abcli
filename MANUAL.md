@@ -1508,6 +1508,21 @@ the cluster would never open it.
 Exit 0 loaded, 1 not loaded, 11 the server could not be read. A `$persona` takes a stand-in id, stable across runs.
 `users` are ignored, and the verb says so: only the door writes them, on a cluster. It cannot see a service's rules.
 
+`--then -- <command>` checks what was loaded, in the app's own environment, because a check that imports the app's
+services cannot run inside abcli:
+
+```bash
+abcli seed load --throwaway omni/seed/demo/<tenant>.json --then -- sh -c \
+  'backend/.venv/bin/python -m omnianvil.core.service.rules_check --database-url "$ABCLI_SEED_DATABASE_URL" \
+     --tenant "$ABCLI_SEED_TENANT_ID" --import <services>'
+```
+
+The command runs after the load and before the drop, from the current folder, with `ABCLI_SEED_DATABASE_URL` (a plain
+`postgresql://` URL) and `ABCLI_SEED_TENANT_ID`; `DATABASE_URL` and the app's own database variable point at the same
+database. Its output passes through with the server's password redacted, its exit code is the verb's, and the database is
+dropped either way. A load that fails runs no command, and a command that cannot start is exit 127. It runs with no shell,
+so write `sh -c` to use a variable in an argument.
+
 Interrupted by SIGINT, SIGTERM or SIGHUP, the verb still drops the database, and a run it did not finish never exits 0.
 **Only SIGKILL to the whole process group leaves `abcli_verify_<hex>` behind**, because nothing is left to drop it. The
 same goes for `verify-schema`: a CI that cancels a job that way drops that database by its name.
