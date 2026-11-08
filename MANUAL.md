@@ -446,14 +446,31 @@ All four: `docker pull` the devbox image and re-run.
 
 ```bash
 abcli devload --cluster <slug>                     # THE act: package locally AND deliver
-abcli devload --pack-only --out ./pkg              # produce the package and do NOT deliver
+abcli devload --pack-only --out ./pkg              # produce the package, and ./pkg.tar.gz, and do NOT deliver
 abcli devload --cluster <slug> --for malho-R50     # the act, done FOR a store code: checked first, read back after
+abcli devload --cluster <slug> --sha <40-hex>      # from an export (git archive): the commit it came from
 ```
+
+**From an export, say its commit.** The release is named by the sha of the app's clean work tree. An app root
+without git (a `git archive` export) has none, and its release was named `…-semsha-…` (abcli-dev#544). `--sha`
+gives the commit the export came from, in full (`git rev-parse <rev>` where it was made). It is refused on a git
+work tree, whose sha is git's to say.
 
 ⚠️ **One act, one verb.** Packaging and delivering are not two steps you chain — they are the two
 halves of the same thing, which is why there is a `--cluster` and not a `pack` followed by a `push`.
 There is **no default**: you either name the cluster or you say you are not delivering. A default that
 did not deliver would be the flag that one day skips the delivery with nobody noticing.
+
+⚠️ **`--out` names the package's directory, not a folder to put it in.** A pack replaces that directory whole, so
+it takes only a new or empty directory, or one an earlier pack made (the package carries a `.abcli-devload-package`
+mark, which never travels in the tarball). A directory holding anything else is refused before a byte is removed
+(abcli-dev#549: through 0.5.131, `--out` emptied whatever directory it was given).
+
+**`--pack-only` writes the tarball a delivery sends** beside the package's directory (`--out ./pkg` gives
+`./pkg.tar.gz`, `omni.config.json` at its root), and says where. Until it did, the receipt named only the directory,
+and owners made their own tar (abcli-dev#548). An existing file there is replaced only when it is an earlier package's
+tarball. `--for` is refused with `--pack-only`: a store code is checked against a delivery, and that tarball is yours
+to send.
 
 **`--cluster` never reports "delivered" on the route's word alone.** The route answers `200` only
 when the app is serving — and then `devload` asks for the app's `remoteEntry` **through the edge**,
@@ -1434,6 +1451,7 @@ your mould is wrong, and the message says so.
 ```bash
 abcli guide              # the guides this abcli carries
 abcli guide jobs         # background jobs for a guest app: declare, run, enqueue, read progress
+abcli guide dashboards   # frontend/dashboard-defaults.json: an app's authored dashboard defaults
 abcli guide jobs > jobs.md
 ```
 
