@@ -1526,6 +1526,16 @@ the cluster would never open it.
 Exit 0 loaded, 1 not loaded, 11 the server could not be read. A `$persona` takes a stand-in id, stable across runs.
 `users` are ignored, and the verb says so: only the door writes them, on a cluster. It cannot see a service's rules.
 
+`--twice` proves the load idempotent (@apolodoro, #1439): the same file is loaded again in its own transaction, and every
+column of every row of the loaded tables is compared before and after, one hash per row's whole text. The receipt names
+what it compared (`the second load of the same file changed nothing — every column of every row compared: patient 2`),
+so a test can tell the comparison ran; a change exits 2, naming the tables and how many rows were written and taken away.
+`--then` runs after the second load.
+
+```bash
+abcli seed load --throwaway omni/seed/demo/<tenant>.json --twice
+```
+
 `--then -- <command>` checks what was loaded, in the app's own environment, because a check that imports the app's
 services cannot run inside abcli:
 
@@ -1684,6 +1694,9 @@ abcli report publish --summary-file r.md  # your Resumo, and the lists from the 
 ```
 
 - **The square is your credential's, and the owner is you**: neither is ever sent by hand.
+- **`request file --task N` holds task N until the Principal answers.** Link the act that must wait for his word, never a
+  planning task whose child plan you still have to write: a child plan is not written while its task is blocked
+  (@arges, plan 323).
 - **A target already asked** answers the first filer's code and owner (`already open: nexo-R12, filed by nexo`):
   cite it under T and do not file it again.
 - **A seat writes only its Resumo.** `abcli report publish` sends the file and nothing else; the store fills R, O, T
