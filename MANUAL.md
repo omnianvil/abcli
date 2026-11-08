@@ -1597,6 +1597,34 @@ concluding one) and `abcli skills install work-new-agent` (an OMEGA's walk, with
 agent, with `abcli work seat add` and `abcli work seat check`). They are vendored from the package's export by
 `scripts/vendor-work-skills.py`, which checks the export's stamp before it writes anything.
 
+## `abcli personas`, `abcli persona-password` — a cluster's demo personas, and one's password where it is used
+
+```bash
+abcli personas --cluster omni                         # what the loads declared, every tenant
+abcli personas --cluster omni --tenant aurora --json  # one tenant, as the core answered
+abcli persona-password ana.admin --cluster omni --to-file .kc-password   # mode 600, for run-e2e.sh's KC_PASSWORD_FILE
+abcli persona-password ana.admin --cluster omni --env KC_PASSWORD -- ./run-e2e.sh
+```
+
+These two verbs call the core's routes, with the same cluster credential as `devload`.
+
+**`personas`** reads `GET /api/cluster/personas` and filters by tenant on this side. It needs the trail reader on the
+cluster: `cluster.telemetry.read` or `cluster.app.devload`.
+
+**`persona-password`** reads `POST /api/cluster/personas/{username}/credential`. It needs `cluster.demo.persona.read`.
+Only the username travels in the URL; the tenant goes in the body. The core records every read and answers its id,
+which the verb prints with who was read and when the password was rotated.
+
+**The password is never printed and never in an argv.** It goes to one of two places:
+- a file, mode 600, written whole and never through a link;
+- the environment of the command after `--`, in the variable you name, and nowhere else.
+
+A refusal is the core's own words:
+- **403:** the role is missing, or the cluster is production or undeclared;
+- **404:** the cluster offers no demo credentials, or no load gave the persona a password;
+- **409:** a persona of two tenants (name one with `--tenant`), or a password the key no longer opens;
+- **503:** the read could not be recorded, so no password was given.
+
 ## `abcli probe` — the readings of a square's stations
 
 ```bash
