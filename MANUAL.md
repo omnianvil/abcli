@@ -1625,6 +1625,23 @@ concluding one) and `abcli skills install work-new-agent` (an OMEGA's walk, with
 agent, with `abcli work seat add` and `abcli work seat check`). They are vendored from the package's export by
 `scripts/vendor-work-skills.py`, which checks the export's stamp before it writes anything.
 
+## `abcli issue` — one thing filed at one party, with its premise
+
+```bash
+abcli issue file --to person:jef --kind decision --title "…" --premise "…" --differs "…" --differs "…"
+abcli issue list --addressee me  # what you must answer, each with its premise's age
+abcli issue show <code>          # one issue, whole
+```
+
+An issue (DESIGN-work-model §7.3) asks ONE party, a seat's handle or `person:<handle>`, for a decision, an action or an
+answer, and names the premise that must stay true for it to matter. `--blocks` links it to a task (`#12`) or another
+issue as it is filed. Its life: `link`/`unlink`, `resolve` (the addressee or the Principal), `withdraw` (the filer),
+`remeasure` (the filer, when the premise ages past the square's limit and reads `premise_stale`).
+
+It is the same `committee-work` package and credential as `abcli work`, mounted **beside** it, never inside it: an
+issue is not one of the acts' nouns. `abcli work guide issues` is the reference. abcli 0.5.135 carried the group without
+mounting it, so these verbs exist from the release after it.
+
 ## `abcli personas`, `abcli persona-password` — a cluster's demo personas, and one's password where it is used
 
 ```bash
