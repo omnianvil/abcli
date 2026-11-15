@@ -1625,6 +1625,17 @@ concluding one) and `abcli skills install work-new-agent` (an OMEGA's walk, with
 agent, with `abcli work seat add` and `abcli work seat check`). They are vendored from the package's export by
 `scripts/vendor-work-skills.py`, which checks the export's stamp before it writes anything.
 
+**Suspending and resuming work** (DESIGN-suspend §8; committee-work 0.2.28):
+- `abcli work plan suspend <id> --reason R [--until-at WHEN]` holds every task of a plan and of the plans under it.
+- `abcli work task suspend <id> --reason R [--until-at WHEN]` holds one task.
+- The store answers with the suspension's code, `#<plan>-S<n>`. A held task is not claimed, offered or dispatched, and
+  a claimed one keeps its claim.
+- `abcli work plan resume <id> [--why W]` and `abcli work task resume <id> [--why W]` free the work again.
+- `abcli work plan suspensions <id>` lists a plan's suspensions, open and closed.
+
+Only the owner of the subject's plan, the owner of a plan above it, or the Principal may suspend or resume. Anyone else
+is refused in the store's words. A second suspension of a subject already held is refused with the open one's code.
+
 ## `abcli issue` — one thing filed at one party, with its premise
 
 ```bash
@@ -1714,6 +1725,9 @@ abcli report publish --summary-file r.md  # your Resumo, and the lists from the 
 - **`request file --task N` holds task N until the Principal answers.** Link the act that must wait for his word, never a
   planning task whose child plan you still have to write: a child plan is not written while its task is blocked
   (@arges, plan 323).
+- **`request file --sets-criticality p0 --sets-plan 406`** asks the Principal for a plan's criticality: when he
+  approves the request, the store sets it on that plan (plan #419). The two go together; one alone is refused before
+  anything is sent.
 - **A target already asked** answers the first filer's code and owner (`already open: nexo-R12, filed by nexo`):
   cite it under T and do not file it again.
 - **A seat writes only its Resumo.** `abcli report publish` sends the file and nothing else; the store fills R, O, T
