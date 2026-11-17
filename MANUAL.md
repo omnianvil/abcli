@@ -1639,7 +1639,7 @@ is refused in the store's words. A second suspension of a subject already held i
 ## `abcli issue` — one thing filed at one party, with its premise
 
 ```bash
-abcli issue file --to person:jef --kind decision --title "…" --premise "…" --differs "…" --differs "…"
+abcli issue file --to person:jeff --kind decision --title "…" --premise "…" --differs "…" --differs "…"
 abcli issue list --addressee me  # what you must answer, each with its premise's age
 abcli issue show <code>          # one issue, whole
 ```
@@ -1735,6 +1735,14 @@ abcli report publish --summary-file r.md  # your Resumo, and the lists from the 
   revision, and exits 1. A seat with no live station is refused: a report is drawn in the conversation it closes.
 - The credential, the base and the exit codes are those of `abcli work`: 0 done, 1 refused (the store's code and
   sentence), 2 usage, 3 not configured, 4 unreadable. `--json` prints the store's whole answer.
+- **A frozen square files no new R, A or O** (plan #519; DESIGN-work-model §11): its open rows became issues. There,
+  `request file`, `action file` and `pending add` are refused with the store's `legacy_items_frozen` (exit 1), and the
+  verb prints the `abcli issue` to type instead, its known values filled in. A decision or version request becomes a
+  decision issue to `person:jeff`, and its `--task` becomes `--blocks`. A deploy that names a PR files nothing, because
+  the gate replaces it. An action becomes an action issue to `person:jeff`. An own item becomes an action issue to your
+  own seat. With `--blocked-by Y`, the item is the blocked one: `abcli issue link <Y's issue> <the new issue>`. With
+  `--task T` as well, nothing is filed: link Y's issue to `#T`. Every other verb of the three groups goes on, so the
+  rows are read as their history and an open one can still be closed.
 
 ## Your 1x1 with the principal — and why it is NOT an abcli verb
 
