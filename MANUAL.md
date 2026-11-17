@@ -1476,6 +1476,27 @@ them **as you**.
 not ask**. A `3` covers no answer, a timeout, a `5xx`, or an answer that is not JSON. It **never** means
 your mould is wrong, and the message says so.
 
+### `abcli serve --toolset mould` — the same service as MCP tools, from the engine's own table
+
+```bash
+abcli serve --toolset mould    # stdio; from inside an app, or with OMNICAST_URL set
+```
+
+An agent gets the mould's read-only acts as MCP tools (@cerebelo's plan #522; the mould-mcp design, "Instructions from
+one source"). At start-up the server reads the engine's **table of acts** from the service (`GET /acts`). Every act the
+table marks as changing nothing is a tool: today `mould_status`, `mould_lint` and `mould_check`. Each is named,
+described and guided **by the engine**, and the server's instructions are the engine's guide entries.
+
+- **abcli adds no tool name and no word of its own.** An act the engine gains is served at the next start, with no
+  abcli release; one it marks as writing (`derive`, `pour`) is not served here.
+- **Inputs come from the table too.** An act's own inputs are its `params`, a JSON Schema in the engine's words (the
+  `law` of `law_explain`). An act that reads the app (its `app` flag, or a POST route when the flag is absent) also
+  takes `app`: the app's folder, or any folder inside it (default: where the server runs). A POST sends the app's tree,
+  as `abcli mould` does, with the act's own inputs beside it. A GET sends the act's own inputs as its query. The
+  service's answer comes back whole, and a refusal is a tool error that carries the service's own body.
+- **A service whose engine has no table** (`GET /acts` answers 404: an engine before platform #2968) leaves the server
+  with **no tool**, and its instructions say why. It never falls back to a list of its own.
+
 ## `abcli guide` — the platform's guides for external developers, carried in the binary
 
 ```bash
