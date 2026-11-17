@@ -168,6 +168,31 @@ satisfy the proxy **without** the intent — `adr-031` matches an import line, s
 a dead import the way past. **You publish the dish, not the recipe.** The waiver comment stays public,
 though: a declared exception lands in a diff where a reviewer sees it, and an evasion never does.
 
+### G3 — `abcli check --app-pages <frontend>`
+
+```bash
+abcli check --app-pages apps/web                      # each data door on the app's own pages: WARNING or REFUSED
+abcli check --app-pages apps/web --today 2026-12-20   # judged as that day (default: today)
+abcli check --app-pages apps/web --cutoffs '{"list": "2026-12-15"}'   # a REHEARSAL: a kind's day over the module's
+```
+
+G3 is the working-copy rule on an app's own pages: a page reads and writes business data only through a copy, never
+through the app's own client. It is the **platform's own module** (`omnicast/read/app_pages.py`), carried verbatim, so
+an app's CI runs it without OmniCast. Its lines and exits are the module's, **not the ADR gate's**:
+
+- `0`: no door, or only warnings;
+- `1`: at least one door REFUSED, because its kind's cut-off day has come;
+- `2`: the folder has no `src/`, a malformed `--today` or `--cutoffs`, or a usage error.
+
+A kind's cut-off day is set when the Principal approves that kind's template (30 days after it). The day lives in the
+platform's module, and it reaches your CI with the abcli cut that carries it. Until then that kind's doors stay
+warnings. **`--cutoffs` is for a test or a rehearsal, never for an app's CI**, since an app that passed its own days
+would be setting its own deadline. Whenever it is given, abcli says so on stderr.
+
+The days this abcli carries (platform 7295b2737, #2970; the Principal's date on cerebelo-R38): **record pages from
+2026-12-15**. Dashboards and lists have no day yet. Before its day, a door's warning already names it (`WARNING [record,
+refused from 2026-12-15]`).
+
 ### O veredicto diz que abcli o produziu
 
 Antes do veredicto, o `check` (e o `--staged`) diz a versão do binário que correu e o pin do `.abcli.lock`, e
@@ -1007,12 +1032,17 @@ you: its own diagnostic's trouble is not your problem.
 abcli px inbox                     # what is waiting on ME: Conversations, then my Notices
 abcli px notice <id>               # read ONE notice           (stamps it read; no reply)
 abcli px send --to vero "…"        # open a thread            (born `over`)
+abcli px send --to vero --task 12 --file ask.md   # an ask ABOUT task #12: the helper's calls are charged to it
 abcli px get <msg-id>              # read ONE message         (marks it read)
 abcli px reply <msg-id> "…"        # answer in the thread     (born `over`)
 abcli px out <msg-id> "…"          # câmbio, desligo — closes the thread
 abcli px channel --last 20         # the open frequency
 abcli px who [--expertise rls]     # profiles — who to address
 ```
+
+A thread can carry the task it is about (`--task`, committee-radio 0.5.1; @brontes's plan #461): reading it pushes
+that task on the reader's focus (`abcli work focus`), and closing the thread pops it. A thread's task never changes,
+so a new subject is a new thread.
 
 A **notice** is what the system tells you (a PR merged, for one); a conversation is what a person or an agent
 asks you. `px inbox` lists unread notices under their own section, and `--json` adds `notices`, read ones
@@ -1635,6 +1665,17 @@ agent, with `abcli work seat add` and `abcli work seat check`). They are vendore
 
 Only the owner of the subject's plan, the owner of a plan above it, or the Principal may suspend or resume. Anyone else
 is refused in the store's words. A second suspension of a subject already held is refused with the open one's code.
+
+**Your focus, and an OMEGA's coordination** (DESIGN-usage-meter §5.1 and §5.6; @brontes's plan #461; committee-work
+0.2.29):
+- `abcli work focus [TASK | --back | --none]` says which task your calls are charged to. `TASK` pushes help on it (three
+  levels at most), `--back` pops, `--none` clears the stack, and with nothing given it prints the stack. Every switch
+  carries this host's own time. Claiming a task makes it your only focus (the stack it replaces closes); finishing it,
+  done or failed, ends it and clears the rest of the stack.
+- `abcli work coordination add TITLE` and `abcli work coordination close TASK` are an OMEGA's own cost center. `add`
+  creates a coordination task (`train 38`) that has no version and no review; `close` ends one of your own. Only an
+  OMEGA may use them, and only with the credential of the square its coordination plan lives in. The rubric
+  `coordination · <you>` is never closed.
 
 ## `abcli issue` — one thing filed at one party, with its premise
 
