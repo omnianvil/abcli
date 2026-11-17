@@ -184,6 +184,9 @@ an app's CI runs it without OmniCast. Its lines and exits are the module's, **no
 - `1`: at least one door REFUSED, because its kind's cut-off day has come;
 - `2`: the folder has no `src/`, a malformed `--today` or `--cutoffs`, or a usage error.
 
+There is no `--format json` with `--app-pages`: the module writes no JSON, and abcli does not invent one. Read the exit
+code and the lines. Asking for it is a usage error that says so (exit `2`).
+
 A kind's cut-off day is set when the Principal approves that kind's template (30 days after it). The day lives in the
 platform's module, and it reaches your CI with the abcli cut that carries it. Until then that kind's doors stay
 warnings. **`--cutoffs` is for a test or a rehearsal, never for an app's CI**, since an app that passed its own days
