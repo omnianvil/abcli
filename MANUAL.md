@@ -1482,13 +1482,22 @@ your mould is wrong, and the message says so.
 abcli serve --toolset mould    # stdio; from inside an app, or with OMNICAST_URL set
 ```
 
-An agent gets the mould's read-only acts as MCP tools (@cerebelo's plan #522; the mould-mcp design, "Instructions from
-one source"). At start-up the server reads the engine's **table of acts** from the service (`GET /acts`). Every act the
-table marks as changing nothing is a tool: today `mould_status`, `mould_lint` and `mould_check`. Each is named,
-described and guided **by the engine**, and the server's instructions are the engine's guide entries.
+An agent gets the mould's acts as MCP tools (@cerebelo's plans #522 and #530; the mould-mcp design, "Instructions from
+one source"). At start-up the server reads the engine's **table of acts** from the service (`GET /acts`). Every act of
+the table is a tool: today `law_explain`, `mould_pages`, `mould_status`, `mould_lint`, `mould_check`, `mould_derive`
+and `mould_pour`. Each is named, described and guided **by the engine**, and the server's instructions are the engine's
+guide entries.
 
 - **abcli adds no tool name and no word of its own.** An act the engine gains is served at the next start, with no
-  abcli release; one it marks as writing (`derive`, `pour`) is not served here.
+  abcli release.
+- **An act that writes previews first** (the table's `changes` flag; platform #2977). The engine never writes your
+  tree: it answers the changes of a scratch pour, and abcli writes them **as you**, the way `abcli mould pour` does.
+  `mould_pour` takes the engine's `dry_run` param, true by default: the preview writes nothing and names the pages the
+  pour would replace (`pages_replaced`). Only `dry_run: false` writes. `mould_derive` declares no `dry_run`, so it
+  writes when it is called. Before writing, abcli refuses a **dirty tree** and names its files, without asking the
+  service; a preview is allowed on one. The answer carries `applied`: `false`, or the files written and deleted. A
+  refusal of the service's (a stale derive, the law) is a tool error with its whole body, remedy included, and writes
+  nothing. A writing tool is listed with `readOnlyHint: false`.
 - **Inputs come from the table too.** An act's own inputs are its `params`, a JSON Schema in the engine's words (the
   `law` of `law_explain`). An act that reads the app (its `app` flag, or a POST route when the flag is absent) also
   takes `app`: the app's folder, or any folder inside it (default: where the server runs). A POST sends the app's tree,
