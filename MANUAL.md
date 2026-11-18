@@ -174,6 +174,7 @@ though: a declared exception lands in a diff where a reviewer sees it, and an ev
 abcli check --app-pages apps/web                      # each data door on the app's own pages: WARNING or REFUSED
 abcli check --app-pages apps/web --today 2026-12-20   # judged as that day (default: today)
 abcli check --app-pages apps/web --cutoffs '{"list": "2026-12-15"}'   # a REHEARSAL: a kind's day over the module's
+abcli check --app-pages apps/web --list-pages         # first, one `PAGE [kind] — <page>` line per page read
 ```
 
 G3 is the working-copy rule on an app's own pages: a page reads and writes business data only through a copy, never
@@ -184,6 +185,10 @@ an app's CI runs it without OmniCast. Its lines and exits are the module's, **no
 - `1`: at least one door REFUSED, because its kind's cut-off day has come;
 - `2`: the folder has no `src/`, a malformed `--today` or `--cutoffs`, or a usage error.
 
+Every run ends with `read N pages`, so a clean page leaves a trace too. `--list-pages` names each page read before
+the warnings (platform #2984). G3 also refuses a copy a page makes by hand, `new OmniWorkingCopy(` or an object shaped
+like one, since only `@omnianvil/working-copy` makes a copy (platform #2988). The copy carried is platform 9675929cf's.
+
 There is no `--format json` with `--app-pages`: the module writes no JSON, and abcli does not invent one. Read the exit
 code and the lines. Asking for it is a usage error that says so (exit `2`).
 
@@ -192,7 +197,7 @@ platform's module, and it reaches your CI with the abcli cut that carries it. Un
 warnings. **`--cutoffs` is for a test or a rehearsal, never for an app's CI**, since an app that passed its own days
 would be setting its own deadline. Whenever it is given, abcli says so on stderr.
 
-The days this abcli carries (platform 7295b2737, #2970; the Principal's date on cerebelo-R38): **record pages from
+The days this abcli carries (platform 9675929cf, unchanged since #2970; the Principal's date on cerebelo-R38): **record pages from
 2026-12-15**. Dashboards and lists have no day yet. Before its day, a door's warning already names it (`WARNING [record,
 refused from 2026-12-15]`).
 
@@ -1296,6 +1301,12 @@ both files whole and dropped a repo's own rules in silence (@rubi measured it in
 and `.abcli.env`, staged by the next `git add -A`). The first upgrade of a file with no block keeps, after it, every
 line the plan does not carry, and names each one; `plan upgrade --dry-run` names them before anything is written.
 
+**One check stands for the whole CI: "App essentials" (plan v23).** It needs every job of `ci.yml` and fails when any
+of them did not succeed, a **skipped** job included: a skipped job is a law not verified, and GitHub counts a skipped
+check as passed. The runner lands a fleet PR on that one name, as it lands the platform's on "PR essentials", and the
+name does not move when the legs are renamed in a re-vendor. So a repo whose `ENGINE_SDK_READY` is not `true`, where
+three legs skip, gets "App essentials" **red** until it declares itself ready. That is on purpose.
+
 The lock cannot be its own witness: re-blessing a hand-edit inside the lock is reported as a **forged** lock,
 not as integrity, and a plan version this binary never published is reported as **unverifiable** rather than
 intact. A gate with no anchor must refuse, not pass.
@@ -1709,6 +1720,19 @@ is refused in the store's words. A second suspension of a subject already held i
   creates a coordination task (`train 38`) that has no version and no review; `close` ends one of your own. Only an
   OMEGA may use them, and only with the credential of the square its coordination plan lives in. The rubric
   `coordination · <you>` is never closed.
+
+**A square's targets** (committee-work 0.2.32, abconvoy#1177; @efesto, for the square's OMEGA):
+- `abcli work target list` lists the square's targets by key, with the repository and branch each runner judges, the
+  verdicts it requires and the shape of its gate. `abcli work target show TARGET_ID` shows one target whole. Any member
+  may list and show.
+- `abcli work target declare --file target.json` declares a new target in the square. The document is the store's body:
+  `key`, `adapter` (`github`), `locator` (`owner/repo@branch`), at least one `required_verdicts` entry
+  (`{kind, party_kind, party_id}`), and optionally `conditional_verdicts`, `owner_scopes`, `lanes`, `after_target_id`
+  and the gate's `asks_task`, `asks_size` and `publishes_gate`, each true when left out. Only the square's OMEGA or the
+  Principal may declare. A repository another square's target already holds, an unknown party, or no required verdict
+  is refused in the store's words. Replacing a target stays the Principal's.
+- The MCP toolset (`abcli serve --toolset work`) offers the same acts as `target_list`, `target_show` and
+  `target_declare`.
 
 ## `abcli issue` — one thing filed at one party, with its premise
 
