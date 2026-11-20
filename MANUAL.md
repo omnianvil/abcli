@@ -1289,6 +1289,13 @@ in somebody else's red PR. A repair could not travel.
 Now the plan is a versioned artefact: your repo pins one in `.abcli-plan.lock`, a fix lands upstream, and it
 reaches every repo that upgrades. **Do not hand-edit a planned file** — `plan check` refuses, on purpose.
 
+Since plan v24 the frontend's image is the plan's too: `.github/workflows/build-web.yml` and `frontend/Dockerfile`. The
+image is `<repo>-web`, built from `frontend/`, with `metadata/derived/surfaces` handed in as the named build context
+`surfaces`, so the poured pages' imports resolve. It builds on every pull request and pushes only from `main`. An app that
+carries `frontend/vite.config.pwa.ts` also builds its PWA, served at `/<repo>/`. If your repo wrote its own pair, run
+`abcli plan upgrade --dry-run` first: it marks each file it would REPLACE, so compare your own lines with the plan's
+before anything is overwritten.
+
 `plan check` also NOTES (never a red) a workflow of the repo's own that calls a planned script with no arguments: a
 repin replaces the script whole, defaults included, and a bare call rides whatever default comes next
 (vendor-types.sh's `OUT` moved, and mpem's build-web.yml broke on the merge). Name what it needs, an argument or a
