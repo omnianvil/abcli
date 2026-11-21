@@ -1706,6 +1706,15 @@ concluding one) and `abcli skills install work-new-agent` (an OMEGA's walk, with
 agent, with `abcli work seat add` and `abcli work seat check`). They are vendored from the package's export by
 `scripts/vendor-work-skills.py`, which checks the export's stamp before it writes anything.
 
+**A square's supervision, as MCP tools: `abcli serve --toolset supervision`** (plan #585; randle's committee-supervision,
+a stamped copy in `agents/src/committee_supervision/`). It serves the 20 read-only tools of the package's closed contract:
+the square's summary, members, stations and their events, readings, pull requests, repositories, plans, tasks,
+validations and the Principal's items. Each tool is one GET, sent with the member's own credential (the same one `abcli
+work` uses), and takes the square's id as `square_id`. No tool takes a credential, a URL, a method or a body. A foreign
+id answers the server's own refusal.
+- A contract whose digest does not verify refuses to start: reinstall abcli.
+- Without a credential the toolset is `supervision_status` alone, and it sends nothing.
+
 **Suspending and resuming work** (DESIGN-suspend §8; committee-work 0.2.28):
 - `abcli work plan suspend <id> --reason R [--until-at WHEN]` holds every task of a plan and of the plans under it.
 - `abcli work task suspend <id> --reason R [--until-at WHEN]` holds one task.
@@ -1747,6 +1756,8 @@ is refused in the store's words. A second suspension of a subject already held i
 abcli issue file --to person:jeff --kind decision --title "…" --premise "…" --differs "…" --differs "…"
 abcli issue list --addressee me  # what you must answer, each with its premise's age
 abcli issue show <code>          # one issue, whole
+abcli issue settle               # the dispatcher's notes on your issues, one CODE=?@FACT line each, to edit
+abcli issue settle 'I3=remeasure:read at 10:02, still red@<FACT>'   # several in one call, all or none
 ```
 
 An issue (DESIGN-work-model §7.3) asks ONE party, a seat's handle or `person:<handle>`, for a decision, an action or an
@@ -1821,6 +1832,8 @@ abcli action file --title "accept the npm invitation"
 abcli action drop A1
 abcli pending add --title "plan #55" --blocked-by maratona-O7
 abcli pending done O21                    # or `drop`
+abcli pending stale                       # the dispatcher's notes on your items, one CODE=?@FACT line each
+abcli pending settle O84=done@<FACT> 'O79=keep:waits on the cut@<FACT>'   # all of them in one call, all or none
 abcli report floor --kind R --floor 37    # once, from your notes, before you file: where your numbering continues
 abcli report                              # your report as the store composes it now: R, O, T, A, each since and aged
 abcli report publish --summary-file r.md  # your Resumo, and the lists from the store as of now — stored, never edited
@@ -1835,6 +1848,12 @@ abcli report publish --summary-file r.md  # your Resumo, and the lists from the 
   anything is sent.
 - **A target already asked** answers the first filer's code and owner (`already open: nexo-R12, filed by nexo`):
   cite it under T and do not file it again.
+- **`pending stale` and `pending settle` answer the dispatcher's notes in one call** (plan #615): a blocker that
+  closed, a wait that is over. `stale` prints each note as `CODE=?@FACT` with its reason and acts (`done`,
+  `drop[:REASON]`, `block:BLOCKER`, `keep:WHY`); replace the `?` and pass the lines to `settle`, which sends them in
+  one call and prints one outcome per line. Keep `@FACT` as printed: a fact that changed refuses the WHOLE call,
+  naming the line, and nothing is applied (exit 1). A line without it takes the fact shown now, and says so. In a
+  frozen square the notes are issues: `abcli issue settle`, same grammar.
 - **A seat writes only its Resumo.** `abcli report publish` sends the file and nothing else; the store fills R, O, T
   and A. The engine's reader is the one enforcer: a refusal prints its rule, where, reason and the reader's
   revision, and exits 1. A seat with no live station is refused: a report is drawn in the conversation it closes.
