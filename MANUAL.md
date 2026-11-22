@@ -505,6 +505,15 @@ and owners made their own tar (abcli-dev#548). An existing file there is replace
 tarball. `--for` is refused with `--pack-only`: a store code is checked against a delivery, and that tarball is yours
 to send.
 
+**Every package says where it came from, in `source.json` at its root** (plan #654, task #3379):
+`{"schema": 1, "app", "version", "repository", "commit", "abcli", "lock_sha256"}`, and no time.
+- `repository` is `GITHUB_REPOSITORY` in Actions, else the `origin` remote's owner/repo, else `null`. A local path for
+  `origin` names no repository.
+- `commit` is `null`, with `"dirty": true`, when a file the package carries differs from `HEAD`. That includes the
+  descriptor and a new file under the backend; the built front does not count. A release refuses such a package.
+- The tarball is reproducible: two packs of one clean commit give one sha256, with each file at the commit's time and
+  no owner. The receipt prints the commit, or why there is none.
+
 **`--cluster` never reports "delivered" on the route's word alone.** The route answers `200` only
 when the app is serving — and then `devload` asks for the app's `remoteEntry` **through the edge**,
 the way a browser will. Two instruments, looking at the same door from different sides:
@@ -1295,6 +1304,16 @@ image is `<repo>-web`, built from `frontend/`, with `metadata/derived/surfaces` 
 carries `frontend/vite.config.pwa.ts` also builds its PWA, served at `/<repo>/`. If your repo wrote its own pair, run
 `abcli plan upgrade --dry-run` first: it marks each file it would REPLACE, so compare your own lines with the plan's
 before anything is overwritten.
+
+Since plan v25 the release is the plan's too: `.github/workflows/release.yml`. Push a tag `vX.Y.Z` and it publishes
+the app's install package in that tag's release: `<app>-<version>.tar.gz`, its `.sha256`, and the package's
+`source.json`. The tag must be `v` plus `omni.config.json`'s version, or nothing is built. A release that already holds a
+package is refused, so a published package is never replaced: cut a new version instead. An app that delivers a front
+builds it first (`ENGINE_SDK_READY` and the engine-sdk App, as `ci.yml`'s frontend job does), and the package is never
+made without it. The package comes from `abcli devload --pack-only`, and a `source.json` that names no commit, says
+`dirty`, or names another commit than the tag's is refused before anything is published, as is a package with no
+`source.json` at all: the abcli your `.abcli.lock` pins is older than the plan, so repin it (`abcli pin --latest`). A repo on v24 reads STALE in
+`plan check`, never red; `abcli plan upgrade` adds the one file.
 
 `plan check` also NOTES (never a red) a workflow of the repo's own that calls a planned script with no arguments: a
 repin replaces the script whole, defaults included, and a bare call rides whatever default comes next
