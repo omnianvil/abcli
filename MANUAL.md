@@ -510,9 +510,21 @@ to send.
 - `repository` is `GITHUB_REPOSITORY` in Actions, else the `origin` remote's owner/repo, else `null`. A local path for
   `origin` names no repository.
 - `commit` is `null`, with `"dirty": true`, when a file the package carries differs from `HEAD`. That includes the
-  descriptor and a new file under the backend; the built front does not count. A release refuses such a package.
+  descriptor, a new file under the backend and a page under `docs/`; the built front does not count. A release
+  refuses such a package.
 - The tarball is reproducible: two packs of one clean commit give one sha256, with each file at the commit's time and
   no owner. The receipt prints the commit, or why there is none.
+
+**The package carries the app's `docs/`, checked before anything is packed** (plan #709). The docs portal reads it
+from the installed package. That copy is the installed version exactly, works on a sealed cluster and needs no read
+credential.
+- `docs/` travels at `docs/`, as the backend does: the files git knows, tracked and new, never an ignored draft or a
+  built site.
+- The check is the rule of `abcli docs validate`. An error refuses the pack before a byte is written, naming each
+  failure: a missing `_meta.json`, no `plane`, an unknown persona. A warning, such as a declared persona with no page
+  yet, is printed and refuses nothing, because `docs gen` may fill it.
+- An app with no `docs/` packs as before, and the receipt says the portal will have nothing of it. `abcli docs
+  coverage` is the gate that requires docs.
 
 **`--cluster` never reports "delivered" on the route's word alone.** The route answers `200` only
 when the app is serving — and then `devload` asks for the app's `remoteEntry` **through the edge**,
@@ -1315,6 +1327,28 @@ made without it. The package comes from `abcli devload --pack-only`, and a `sour
 `source.json` at all: the abcli your `.abcli.lock` pins is older than the plan, so repin it (`abcli pin --latest`). A repo on v24 reads STALE in
 `plan check`, never red; `abcli plan upgrade` adds the one file.
 
+Since plan v26 the entrypoint seeds nothing. `entrypoint.sh` waits for Postgres, runs `alembic upgrade head` and serves:
+the commanded demo-seed step is gone, with `APP_SEED_DEMO` and `APP_SEED_SCRIPT`. Demo data reaches an app only through
+the cluster's load-file door (`abcli seed demo`), so a `scripts/seed_demo.py` can be deleted. v26 also closes a gap in
+`release.yml`: a tag whose commit is not on the default branch is refused before anything is built, naming the commit and
+the branch, so a tag pushed on an unreviewed branch commit no longer publishes a release. A repo on v25 reads STALE, and
+`abcli plan upgrade` rewrites `entrypoint.sh` and `release.yml`.
+
+Since plan v27, `scripts/vendor-types.sh` vendors the types set your commit records, never the newest by default.
+The frontend lockfile cannot pin that set, because it records a `file:` directory by its path with no version. Before
+v27, a release built on another day built another front: fusion-connector's v0.1.0 carried `@omnianvil/ui` 0.236.4,
+where the commit's own build had 0.218.2.
+- The script writes `frontend/omnianvil-types.lock.json`, holding the release and each `@omnianvil` package's version,
+  and you commit it beside `package.json`.
+- Without `--release`, it vendors the recorded release. With no record, it uses the release of the `omnianvil-core`
+  your `backend/uv.lock` pins, as `fetch-sdk.sh` does. With neither, it uses the newest release, recorded by its tag.
+- A set whose versions differ from the record is refused, naming each package.
+- `--check`, which CI runs after vendoring, refuses a record that is not committed.
+- Only an explicit `--release <tag>` (or `--release latest`) moves the record. Commit what it writes.
+
+A repo on v26 reads STALE, and `abcli plan upgrade` rewrites `vendor-types.sh`. Its CI then asks you to commit the
+record the first vendoring writes.
+
 `plan check` also NOTES (never a red) a workflow of the repo's own that calls a planned script with no arguments: a
 repin replaces the script whole, defaults included, and a bare call rides whatever default comes next
 (vendor-types.sh's `OUT` moved, and mpem's build-web.yml broke on the merge). Name what it needs, an argument or a
@@ -1835,6 +1869,29 @@ the same base, credential and exchange as `abcli work`, and prints what the rout
 
 Who reads what is the route's rule. An OMEGA reads its whole square; any other member reads its own station. A refusal
 prints the route's own words. Exit codes are those of `abcli work`: 0 done, 1 refused, 3 not configured, 4 unreadable.
+
+## `abcli fleet grep` — count a pattern in the main of every fleet repository you declare
+
+```bash
+abcli fleet grep -F 'core.plans.require_seat(' --list fleet.txt   # fleet.txt: one owner/repo per line, # comments
+abcli fleet grep 'require_seat\(' --planted 'x = require_seat(1)' --repo IterSuite/people-hub --repo IterSuite/mpem
+```
+
+It reads each repository's `main` through your seat's own GitHub App, on the installation of the repository's
+**owner**, and never through another installation. Each repository is read with a token for that one repository and
+`contents: read`. The App comes from `--app-id` and `--app-key`, or `ABCLI_APP_ID` and `ABCLI_APP_KEY`: its client id,
+and the path of its key in your secrets folder. The token never reaches the output.
+
+- **The self-test comes first.** The pattern must hit a planted line in a throwaway repository before any repository
+  is read. The planted line is the pattern's own text, or `--planted`. A broken regex, or a pattern that cannot hit
+  what it looks for, would answer zero everywhere, so it is refused and nothing is read.
+- **Each repository gets one line.** A read repository shows its count (zero included), the main sha and the
+  tracked-file count that prove the read, and the installation used, followed by each matching file with its count.
+  `-F` takes the pattern as a fixed string, otherwise it is an extended regex. Binary files are skipped.
+- **A repository not read is UNREAD, with why.** The reason can be: the App is not installed on the owner; the owner's
+  installation cannot see the repository; there is no `main`; or the clone holds no file. UNREAD is never a zero.
+
+Exit codes: 0 every repository was read · 1 one or more is UNREAD · 2 the self-test failed (nothing was read).
 
 ## `abcli request`, `abcli action`, `abcli pending`, `abcli report` — the end-of-run report's store
 
